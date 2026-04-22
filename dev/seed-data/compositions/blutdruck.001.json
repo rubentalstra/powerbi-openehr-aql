@@ -1,0 +1,216 @@
+{
+  "meta": {
+    "subject_id": "patient-001",
+    "subject_namespace": "local-dev"
+  },
+  "name": {
+    "_type": "DV_TEXT",
+    "value": "Blutdruck"
+  },
+  "_type": "COMPOSITION",
+  "archetype_details": {
+    "_type": "ARCHETYPED",
+    "rm_version": "1.0.4",
+    "template_id": {
+      "_type": "TEMPLATE_ID",
+      "value": "Blutdruck"
+    },
+    "archetype_id": {
+      "_type": "ARCHETYPE_ID",
+      "value": "openEHR-EHR-COMPOSITION.registereintrag.v1"
+    }
+  },
+  "archetype_node_id": "openEHR-EHR-COMPOSITION.registereintrag.v1",
+  "language": {
+    "_type": "CODE_PHRASE",
+    "code_string": "de",
+    "terminology_id": {
+      "_type": "TERMINOLOGY_ID",
+      "value": "ISO_639-1"
+    }
+  },
+  "territory": {
+    "_type": "CODE_PHRASE",
+    "code_string": "DE",
+    "terminology_id": {
+      "_type": "TERMINOLOGY_ID",
+      "value": "ISO_3166-1"
+    }
+  },
+  "category": {
+    "_type": "DV_CODED_TEXT",
+    "value": "event",
+    "defining_code": {
+      "_type": "CODE_PHRASE",
+      "code_string": "433",
+      "terminology_id": {
+        "_type": "TERMINOLOGY_ID",
+        "value": "openehr"
+      }
+    }
+  },
+  "composer": {
+    "_type": "PARTY_SELF"
+  },
+  "context": {
+    "_type": "EVENT_CONTEXT",
+    "setting": {
+      "_type": "DV_CODED_TEXT",
+      "value": "secondary medical care",
+      "defining_code": {
+        "_type": "CODE_PHRASE",
+        "code_string": "232",
+        "terminology_id": {
+          "_type": "TERMINOLOGY_ID",
+          "value": "openehr"
+        }
+      }
+    },
+    "start_time": {
+      "_type": "DV_DATE_TIME",
+      "value": "2025-06-14T08:30:00.000+02:00"
+    },
+    "other_context": {
+      "name": {
+        "value": "Baum",
+        "_type": "DV_TEXT"
+      },
+      "archetype_node_id": "at0001",
+      "_type": "ITEM_TREE",
+      "items": [
+        {
+          "name": {
+            "value": "Status",
+            "_type": "DV_TEXT"
+          },
+          "value": {
+            "_type": "DV_CODED_TEXT",
+            "value": "final",
+            "defining_code": {
+              "_type": "CODE_PHRASE",
+              "code_string": "at0012",
+              "terminology_id": {
+                "_type": "TERMINOLOGY_ID",
+                "value": "local"
+              }
+            }
+          },
+          "_type": "ELEMENT",
+          "archetype_node_id": "at0004"
+        },
+        {
+          "name": {
+            "value": "Kategorie",
+            "_type": "DV_TEXT"
+          },
+          "value": {
+            "_type": "DV_TEXT",
+            "value": "vital-signs"
+          },
+          "_type": "ELEMENT",
+          "archetype_node_id": "at0005"
+        }
+      ]
+    }
+  },
+  "content": [
+    {
+      "name": {
+        "value": "Blutdruck",
+        "_type": "DV_TEXT"
+      },
+      "_type": "OBSERVATION",
+      "archetype_details": {
+        "rm_version": "1.0.4",
+        "template_id": {
+          "value": "Blutdruck"
+        },
+        "archetype_id": {
+          "value": "openEHR-EHR-OBSERVATION.blood_pressure.v2"
+        }
+      },
+      "archetype_node_id": "openEHR-EHR-OBSERVATION.blood_pressure.v2",
+      "subject": {
+        "_type": "PARTY_SELF"
+      },
+      "encoding": {
+        "_type": "CODE_PHRASE",
+        "code_string": "UTF-8",
+        "terminology_id": {
+          "_type": "TERMINOLOGY_ID",
+          "value": "IANA_character-sets"
+        }
+      },
+      "language": {
+        "_type": "CODE_PHRASE",
+        "code_string": "de",
+        "terminology_id": {
+          "_type": "TERMINOLOGY_ID",
+          "value": "ISO_639-1"
+        }
+      },
+      "data": {
+        "name": {
+          "value": "Historie",
+          "_type": "DV_TEXT"
+        },
+        "origin": {
+          "value": "2025-06-14T08:30:00.000+02:00",
+          "_type": "DV_DATE_TIME"
+        },
+        "events": [
+          {
+            "name": {
+              "value": "Beliebiges Ereignis",
+              "_type": "DV_TEXT"
+            },
+            "time": {
+              "value": "2025-06-14T08:30:00.000+02:00",
+              "_type": "DV_DATE_TIME"
+            },
+            "_type": "POINT_EVENT",
+            "data": {
+              "name": {
+                "value": "Blutdruck",
+                "_type": "DV_TEXT"
+              },
+              "archetype_node_id": "at0003",
+              "_type": "ITEM_TREE",
+              "items": [
+                {
+                  "name": {
+                    "value": "Systolisch",
+                    "_type": "DV_TEXT"
+                  },
+                  "value": {
+                    "_type": "DV_QUANTITY",
+                    "units": "mm[Hg]",
+                    "magnitude": 128.0
+                  },
+                  "_type": "ELEMENT",
+                  "archetype_node_id": "at0004"
+                },
+                {
+                  "name": {
+                    "value": "Diastolisch",
+                    "_type": "DV_TEXT"
+                  },
+                  "value": {
+                    "_type": "DV_QUANTITY",
+                    "units": "mm[Hg]",
+                    "magnitude": 82.0
+                  },
+                  "_type": "ELEMENT",
+                  "archetype_node_id": "at0005"
+                }
+              ]
+            },
+            "archetype_node_id": "at0006"
+          }
+        ],
+        "_type": "HISTORY",
+        "archetype_node_id": "at0001"
+      }
+    }
+  ]
+}

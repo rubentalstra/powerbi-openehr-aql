@@ -1,0 +1,5 @@
+{
+  "msbuild-sdks": {
+    "Microsoft.PowerQuery.SdkTools": "2.153.3"
+  }
+}

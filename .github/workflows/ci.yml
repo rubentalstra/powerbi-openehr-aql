@@ -36,37 +36,24 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
+          # TargetFramework in src/OpenEHR.proj is net10.0.
           dotnet-version: "10.0.x"
 
-      - name: Install MakePQX (Microsoft.PowerQuery.SdkTools)
+      - name: Build .mez
         shell: pwsh
         run: |
-          # SdkTools ships as a plain NuGet package (not a dotnet global tool).
-          # Fetch it, then add its tools/ directory to PATH so subsequent steps
-          # can invoke MakePQX.exe directly.
-          nuget install Microsoft.PowerQuery.SdkTools -OutputDirectory $env:RUNNER_TEMP\sdktools -ExcludeVersion
-          $tools = Join-Path $env:RUNNER_TEMP 'sdktools\Microsoft.PowerQuery.SdkTools\tools'
-          if (-not (Test-Path $tools)) {
-            throw "SdkTools tools directory not found at $tools"
-          }
-          "$tools" | Out-File -FilePath $env:GITHUB_PATH -Append
-          Write-Output "Installed MakePQX at $tools"
-
-      - name: Pack .mez
-        shell: pwsh
-        run: |
-          # MakePQX pack requires a project-directory argument (the folder
-          # containing the .mproj / .pq). Pass `src` explicitly — relying on
-          # working-directory:src + implicit CWD yields "Missing file argument".
-          MakePQX pack src
-          Get-ChildItem -Recurse -Path src -Filter *.mez | ForEach-Object { Write-Host "Built: $($_.FullName)" }
+          # src/OpenEHR.proj declares <Project Sdk="Microsoft.PowerQuery.SdkTools">;
+          # the SDK version is pinned in /global.json and NuGet-restored during
+          # `dotnet build`. This produces src/bin/<Configuration>/<TFM>/OpenEHR.mez.
+          dotnet build src/OpenEHR.proj --configuration Release
+          Get-ChildItem -Recurse -Path src\bin -Filter *.mez | ForEach-Object { Write-Host "Built: $($_.FullName)" }
 
       - name: Locate .mez
         id: locate
         shell: pwsh
         run: |
-          $mez = Get-ChildItem -Recurse -Path src -Filter OpenEHR.mez | Select-Object -First 1
-          if (-not $mez) { throw "OpenEHR.mez not found." }
+          $mez = Get-ChildItem -Recurse -Path src\bin -Filter OpenEHR.mez | Select-Object -First 1
+          if (-not $mez) { throw "OpenEHR.mez not found under src\bin." }
           "mez=$($mez.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Upload artifact

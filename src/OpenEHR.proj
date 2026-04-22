@@ -5,7 +5,7 @@
     See: https://learn.microsoft.com/en-us/power-query/install-sdk
   -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <!-- The connector name is the .mez/.pqx file name. Do not change casing. -->
     <PQExtensionName>OpenEHR</PQExtensionName>
     <SuppressCertificateWarning>true</SuppressCertificateWarning>

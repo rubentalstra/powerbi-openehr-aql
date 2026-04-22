@@ -29,17 +29,21 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - name: Install MakePQX (Microsoft.PowerQuery.SdkTools)
+      - name: Expose MakePQX from restored SdkTools
         shell: pwsh
         run: |
-          # SdkTools ships as a plain NuGet package (not a dotnet global tool).
-          nuget install Microsoft.PowerQuery.SdkTools -OutputDirectory $env:RUNNER_TEMP\sdktools -ExcludeVersion
-          $tools = Join-Path $env:RUNNER_TEMP 'sdktools\Microsoft.PowerQuery.SdkTools\tools'
+          # `dotnet build` (next step) will restore Microsoft.PowerQuery.SdkTools
+          # via /global.json into the NuGet global cache. Add its tools/ dir to
+          # PATH so the subsequent sign step can invoke MakePQX.exe directly.
+          # We run a throw-away restore first to guarantee the package exists.
+          dotnet restore src/OpenEHR.proj
+          $version = (Get-Content global.json | ConvertFrom-Json).'msbuild-sdks'.'Microsoft.PowerQuery.SdkTools'
+          $tools = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.powerquery.sdktools\$version\tools"
           if (-not (Test-Path $tools)) {
             throw "SdkTools tools directory not found at $tools"
           }
           "$tools" | Out-File -FilePath $env:GITHUB_PATH -Append
-          Write-Output "Installed MakePQX at $tools"
+          Write-Output "MakePQX available at $tools"
 
       - name: Decode PFX from secret
         shell: pwsh
@@ -51,22 +55,24 @@ jobs:
           }
           [IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\dev-cert.pfx", [Convert]::FromBase64String($env:CODE_SIGN_CERT_PFX_BASE64))
 
-      - name: Pack .mez
+      - name: Build .mez
         shell: pwsh
-        run: MakePQX pack src
+        run: |
+          dotnet build src/OpenEHR.proj --configuration Release
+          Get-ChildItem -Recurse -Path src\bin -Filter *.mez | ForEach-Object { Write-Host "Built: $($_.FullName)" }
 
       - name: Sign → .pqx
         shell: pwsh
         run: |
-          $mez = Get-ChildItem -Recurse -Path src -Filter OpenEHR.mez | Select-Object -First 1
-          if (-not $mez) { throw "OpenEHR.mez not found" }
+          $mez = Get-ChildItem -Recurse -Path src\bin -Filter OpenEHR.mez | Select-Object -First 1
+          if (-not $mez) { throw "OpenEHR.mez not found under src\bin" }
           MakePQX sign --certificate "$env:GITHUB_WORKSPACE\dev-cert.pfx" --password $env:CODE_SIGN_CERT_PASSWORD $mez.FullName
-          Get-ChildItem -Recurse -Path src -Filter OpenEHR.pqx | ForEach-Object { Write-Host "Signed: $($_.FullName)" }
+          Get-ChildItem -Recurse -Path src\bin -Filter OpenEHR.pqx | ForEach-Object { Write-Host "Signed: $($_.FullName)" }
 
       - name: Verify Authenticode signature
         shell: pwsh
         run: |
-          $pqx = Get-ChildItem -Recurse -Path src -Filter OpenEHR.pqx | Select-Object -First 1
+          $pqx = Get-ChildItem -Recurse -Path src\bin -Filter OpenEHR.pqx | Select-Object -First 1
           if (-not $pqx) { throw "OpenEHR.pqx not found" }
           $sig = Get-AuthenticodeSignature $pqx.FullName
           Write-Host "Status: $($sig.Status)"
@@ -86,7 +92,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
-          $pqx = Get-ChildItem -Recurse -Path src -Filter OpenEHR.pqx | Select-Object -First 1
+          $pqx = Get-ChildItem -Recurse -Path src\bin -Filter OpenEHR.pqx | Select-Object -First 1
           Copy-Item $pqx.FullName -Destination release-assets\
           Copy-Item "$env:GITHUB_WORKSPACE\dev-cert.cer" -Destination release-assets\
 
