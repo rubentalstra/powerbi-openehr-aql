@@ -48,7 +48,7 @@ function Probe([string]$label, [string]$method, [string]$path, [string]$body, $h
 }
 
 Write-Output "Checking EHRbase at $base"
-# /management/* is admin-only in EHRbase 2.x — use admin credentials for it.
+# /management/* is admin-only in EHRbase 2.x -- use admin credentials for it.
 Probe 'management/health'   'GET'  '/management/health' $null $adminHeaders
 Probe 'definition/template' 'GET'  '/rest/openehr/v1/definition/template/adl1.4' $null
 Probe 'query/aql'           'POST' '/rest/openehr/v1/query/aql' '{"q":"SELECT e/ehr_id/value FROM EHR e LIMIT 1"}'
