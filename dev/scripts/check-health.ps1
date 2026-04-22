@@ -12,27 +12,19 @@ if (Test-Path $envFile) {
     }
 }
 
-$port       = $env:EHRBASE_PORT;           if (-not $port)       { $port       = '8080' }
-$user       = $env:EHRBASE_USER;           if (-not $user)       { $user       = 'ehrbase' }
-$pass       = $env:EHRBASE_PASSWORD;       if (-not $pass)       { $pass       = 'ehrbase' }
-$adminUser  = $env:EHRBASE_ADMIN_USER;     if (-not $adminUser)  { $adminUser  = 'ehrbase_admin' }
-$adminPass  = $env:EHRBASE_ADMIN_PASSWORD; if (-not $adminPass)  { $adminPass  = 'ehrbase_admin' }
+$port = $env:EHRBASE_PORT;     if (-not $port) { $port = '8080' }
+$user = $env:EHRBASE_USER;     if (-not $user) { $user = 'ehrbase' }
+$pass = $env:EHRBASE_PASSWORD; if (-not $pass) { $pass = 'ehrbase' }
 $base = "http://localhost:$port/ehrbase"
 
-function Get-BasicHeader([string]$u, [string]$p) {
-    $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${u}:${p}"))
-    return @{ Authorization = "Basic $b64" }
-}
+$b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${user}:${pass}"))
+$headers = @{ Authorization = "Basic $b64" }
 
-$headers      = Get-BasicHeader $user $pass
-$adminHeaders = Get-BasicHeader $adminUser $adminPass
-
-function Probe([string]$label, [string]$method, [string]$path, [string]$body, $hdrs) {
-    if (-not $hdrs) { $hdrs = $headers }
+function Probe([string]$label, [string]$method, [string]$path, [string]$body) {
     $url = "$base$path"
     try {
         $requestArgs = @{
-            Uri = $url; Method = $method; Headers = $hdrs
+            Uri = $url; Method = $method; Headers = $headers
             SkipHttpErrorCheck = $true
         }
         if ($body) {
@@ -48,8 +40,8 @@ function Probe([string]$label, [string]$method, [string]$path, [string]$body, $h
 }
 
 Write-Output "Checking EHRbase at $base"
-# /management/* is admin-only in EHRbase 2.x -- use admin credentials for it.
-Probe 'management/health'   'GET'  '/management/health' $null $adminHeaders
+# /management/* is disabled by EHRbase's bundled "docker" profile, so we don't
+# probe it here -- use the REST surface the connector actually talks to.
 Probe 'definition/template' 'GET'  '/rest/openehr/v1/definition/template/adl1.4' $null
 Probe 'query/aql'           'POST' '/rest/openehr/v1/query/aql' '{"q":"SELECT e/ehr_id/value FROM EHR e LIMIT 1"}'
 Write-Output 'All probes OK.'

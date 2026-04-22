@@ -54,10 +54,12 @@ jobs:
 
       - name: Pack .mez
         shell: pwsh
-        working-directory: src
         run: |
-          MakePQX pack
-          Get-ChildItem -Recurse -Filter *.mez | ForEach-Object { Write-Host "Built: $($_.FullName)" }
+          # MakePQX pack requires a project-directory argument (the folder
+          # containing the .mproj / .pq). Pass `src` explicitly — relying on
+          # working-directory:src + implicit CWD yields "Missing file argument".
+          MakePQX pack src
+          Get-ChildItem -Recurse -Path src -Filter *.mez | ForEach-Object { Write-Host "Built: $($_.FullName)" }
 
       - name: Locate .mez
         id: locate
@@ -96,10 +98,17 @@ jobs:
 
       - name: Wait for EHRbase health
         run: |
-          # /management/* is admin-only in EHRbase 2.x by default.
+          # The /management endpoints aren't exposed by EHRbase's bundled
+          # docker profile (log: "Exposing 0 endpoint(s) beneath base path
+          # '/management'"), so poll a real API endpoint with Basic auth.
+          # 200 = ready; any other status = keep trying.
           for i in $(seq 1 120); do
-            if curl -fsS -u ehrbase_admin:ehrbase_admin http://localhost:8080/ehrbase/management/health | grep -q '"UP"'; then
-              echo "EHRbase is UP"
+            code=$(curl -sS -o /dev/null -w "%{http_code}" \
+              -u ehrbase:ehrbase \
+              -H "Accept: application/json" \
+              http://localhost:8080/ehrbase/rest/openehr/v1/definition/template/adl1.4 || true)
+            if [ "$code" = "200" ]; then
+              echo "EHRbase is UP (template endpoint returned 200)"
               exit 0
             fi
             sleep 2

@@ -12,16 +12,13 @@ fi
 EHRBASE_PORT="${EHRBASE_PORT:-8080}"
 EHRBASE_USER="${EHRBASE_USER:-ehrbase}"
 EHRBASE_PASSWORD="${EHRBASE_PASSWORD:-ehrbase}"
-EHRBASE_ADMIN_USER="${EHRBASE_ADMIN_USER:-ehrbase_admin}"
-EHRBASE_ADMIN_PASSWORD="${EHRBASE_ADMIN_PASSWORD:-ehrbase_admin}"
 BASE="http://localhost:${EHRBASE_PORT}/ehrbase"
 
-# probe <label> <method> <path> [body] [creds]
-# creds: "user:pass" — defaults to regular auth. Use admin creds for /management/*.
+# probe <label> <method> <path> [body]
 probe() {
-  local label="$1" method="$2" path="$3" body="${4:-}" creds="${5:-${EHRBASE_USER}:${EHRBASE_PASSWORD}}"
+  local label="$1" method="$2" path="$3" body="${4:-}"
   local url="${BASE}${path}"
-  local args=(-sS -o /dev/null -w "%{http_code}" -u "${creds}" -X "${method}")
+  local args=(-sS -o /dev/null -w "%{http_code}" -u "${EHRBASE_USER}:${EHRBASE_PASSWORD}" -X "${method}")
   if [[ -n "${body}" ]]; then
     args+=(-H "Content-Type: application/json" -d "${body}")
   fi
@@ -36,8 +33,8 @@ probe() {
 }
 
 echo "Checking EHRbase at ${BASE}"
-# /management/* is admin-only in EHRbase 2.x — use admin credentials for it.
-probe "management/health"   GET  "/management/health" "" "${EHRBASE_ADMIN_USER}:${EHRBASE_ADMIN_PASSWORD}"
+# /management/* is disabled by EHRbase's bundled "docker" profile, so we don't
+# probe it here — use the REST surface the connector actually talks to.
 probe "definition/template" GET  "/rest/openehr/v1/definition/template/adl1.4"
 probe "query/aql"           POST "/rest/openehr/v1/query/aql" \
   '{"q":"SELECT e/ehr_id/value FROM EHR e LIMIT 1"}'

@@ -53,23 +53,20 @@ jobs:
 
       - name: Pack .mez
         shell: pwsh
-        working-directory: src
-        run: MakePQX pack
+        run: MakePQX pack src
 
       - name: Sign → .pqx
         shell: pwsh
-        working-directory: src
         run: |
-          $mez = Get-ChildItem -Recurse -Filter OpenEHR.mez | Select-Object -First 1
+          $mez = Get-ChildItem -Recurse -Path src -Filter OpenEHR.mez | Select-Object -First 1
           if (-not $mez) { throw "OpenEHR.mez not found" }
           MakePQX sign --certificate "$env:GITHUB_WORKSPACE\dev-cert.pfx" --password $env:CODE_SIGN_CERT_PASSWORD $mez.FullName
-          Get-ChildItem -Recurse -Filter OpenEHR.pqx | ForEach-Object { Write-Host "Signed: $($_.FullName)" }
+          Get-ChildItem -Recurse -Path src -Filter OpenEHR.pqx | ForEach-Object { Write-Host "Signed: $($_.FullName)" }
 
       - name: Verify Authenticode signature
         shell: pwsh
-        working-directory: src
         run: |
-          $pqx = Get-ChildItem -Recurse -Filter OpenEHR.pqx | Select-Object -First 1
+          $pqx = Get-ChildItem -Recurse -Path src -Filter OpenEHR.pqx | Select-Object -First 1
           if (-not $pqx) { throw "OpenEHR.pqx not found" }
           $sig = Get-AuthenticodeSignature $pqx.FullName
           Write-Host "Status: $($sig.Status)"
