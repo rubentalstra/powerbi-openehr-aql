@@ -24,10 +24,10 @@ $pair = "${user}:${pass}"
 $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($pair))
 $auth = @{ Authorization = "Basic $b64" }
 
-Write-Host "Loading templates from $(Join-Path $SeedDir 'templates')"
+Write-Output "Loading templates from $(Join-Path $SeedDir 'templates')"
 $templateCount = 0
 Get-ChildItem -Path (Join-Path $SeedDir 'templates') -Filter '*.opt' -File | ForEach-Object {
-    Write-Host "  uploading $($_.Name)"
+    Write-Output "  uploading $($_.Name)"
     $bytes = [IO.File]::ReadAllBytes($_.FullName)
     $res = Invoke-WebRequest -Uri "$base/definition/template/adl1.4" -Method Post `
         -Headers ($auth + @{ Accept = 'application/json' }) `
@@ -38,7 +38,7 @@ Get-ChildItem -Path (Join-Path $SeedDir 'templates') -Filter '*.opt' -File | For
         throw "template upload failed: HTTP $($res.StatusCode) - $($res.Content)"
     }
 }
-Write-Host "Templates processed: $templateCount"
+Write-Output "Templates processed: $templateCount"
 
 function New-EHR([string]$subjectId, [string]$subjectNs) {
     $payload = @{
@@ -63,7 +63,7 @@ function New-EHR([string]$subjectId, [string]$subjectNs) {
     return $res.ehr_id.value
 }
 
-Write-Host "Loading compositions from $(Join-Path $SeedDir 'compositions')"
+Write-Output "Loading compositions from $(Join-Path $SeedDir 'compositions')"
 $ehrBySubject = @{}
 $compositionCount = 0
 Get-ChildItem -Path (Join-Path $SeedDir 'compositions') -Filter '*.json' -File | ForEach-Object {
@@ -73,7 +73,7 @@ Get-ChildItem -Path (Join-Path $SeedDir 'compositions') -Filter '*.json' -File |
     $subjectNs = if ($obj.meta.subject_namespace) { $obj.meta.subject_namespace } else { 'local-dev' }
     if (-not $ehrBySubject.ContainsKey($subjectId)) {
         $ehrBySubject[$subjectId] = New-EHR -subjectId $subjectId -subjectNs $subjectNs
-        Write-Host "  EHR $($ehrBySubject[$subjectId]) for subject $subjectId"
+        Write-Output "  EHR $($ehrBySubject[$subjectId]) for subject $subjectId"
     }
     $ehrId = $ehrBySubject[$subjectId]
 
@@ -90,5 +90,5 @@ Get-ChildItem -Path (Join-Path $SeedDir 'compositions') -Filter '*.json' -File |
     }
 }
 
-Write-Host "Compositions uploaded: $compositionCount"
-Write-Host "Distinct EHRs created: $($ehrBySubject.Count)"
+Write-Output "Compositions uploaded: $compositionCount"
+Write-Output "Distinct EHRs created: $($ehrBySubject.Count)"

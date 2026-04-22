@@ -40,11 +40,11 @@ Export-Certificate        -Cert $cert -FilePath $cerPath                      | 
 $pfxBytes  = [IO.File]::ReadAllBytes($pfxPath)
 $pfxBase64 = [Convert]::ToBase64String($pfxBytes)
 
-Write-Host "PFX  : $pfxPath"
-Write-Host "CER  : $cerPath"
-Write-Host ""
-Write-Host "Store these in GitHub repo secrets:"
-Write-Host "  CODE_SIGN_CERT_PASSWORD      = <the password you just used>"
-Write-Host "  CODE_SIGN_CERT_PFX_BASE64    = (the base64 below)"
-Write-Host ""
-Write-Host $pfxBase64
+Write-Output "PFX  : $pfxPath"
+Write-Output "CER  : $cerPath"
+Write-Output ""
+Write-Output "Store these in GitHub repo secrets:"
+Write-Output "  CODE_SIGN_CERT_PASSWORD      = <the password you just used>"
+Write-Output "  CODE_SIGN_CERT_PFX_BASE64    = (the base64 below)"
+Write-Output ""
+Write-Output $pfxBase64

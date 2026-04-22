@@ -69,65 +69,21 @@ jobs:
   integration:
     name: Canonical AQL smoke tests
     runs-on: ubuntu-latest
-    services:
-      # Postgres service seeds the EHRbase-owned DB + roles from the compose
-      # init scripts. CI intentionally uses the same init script path as
-      # dev/docker-compose.yml (dev/postgres-init/*.sql) so behaviour matches.
-      ehrbase-postgres:
-        image: postgres:16.4-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          EHRBASE_USER: ehrbase
-          EHRBASE_PASSWORD: ehrbase
-          EHRBASE_USER_ADMIN: ehrbase_admin
-          EHRBASE_PASSWORD_ADMIN: ehrbase_admin
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-      # EHRbase 2.x is Spring Boot — configuration goes through SPRING_*
-      # env vars, not the legacy DB_* names used by EHRbase 0.x/1.x.
-      ehrbase:
-        image: ehrbase/ehrbase:2.15.0
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://ehrbase-postgres:5432/ehrbase
-          SPRING_DATASOURCE_USERNAME: ehrbase
-          SPRING_DATASOURCE_PASSWORD: ehrbase
-          SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "10"
-          SPRING_FLYWAY_USER: ehrbase_admin
-          SPRING_FLYWAY_PASSWORD: ehrbase_admin
-          SECURITY_AUTHTYPE: BASIC
-          SECURITY_AUTHUSER: ehrbase
-          SECURITY_AUTHPASSWORD: ehrbase
-          SECURITY_AUTHADMINUSER: ehrbase_admin
-          SECURITY_AUTHADMINPASSWORD: ehrbase_admin
-          MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus,env"
-          MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
-        ports: ["8080:8080"]
-        options: >-
-          --health-cmd "wget -qO- http://localhost:8080/ehrbase/management/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 30
-          --health-start-period 60s
-
+    # Using docker compose (not services:) so the init-SQL volume mount works
+    # and ehrbase can depends_on: service_healthy on postgres. GH service
+    # containers start before actions/checkout runs, so they can't mount
+    # repo files.
     steps:
       - uses: actions/checkout@v6
 
-      - name: Seed Postgres schema (matches dev/docker-compose.yml init scripts)
-        env:
-          PGPASSWORD: postgres
+      - name: Seed .env for docker compose
+        run: cp dev/.env.example dev/.env
+
+      - name: Start Postgres + EHRbase
+        working-directory: dev
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends postgresql-client
-          for f in dev/postgres-init/*.sql; do
-            echo "applying $f"
-            psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"
-          done
+          docker compose up -d ehrbase-postgres ehrbase
+          docker compose ps
 
       - name: Wait for EHRbase health
         run: |
@@ -139,7 +95,7 @@ jobs:
             sleep 2
           done
           echo "EHRbase did not become healthy in 240s" >&2
-          docker ps -a || true
+          docker compose -f dev/docker-compose.yml logs ehrbase-postgres ehrbase || true
           exit 1
 
       - name: Install jq
@@ -155,6 +111,11 @@ jobs:
       - name: Run canonical queries
         if: hashFiles('tests/fixtures/canonical-queries.json') != ''
         run: bash tests/integration/run-canonical.sh http://localhost:8080/ehrbase/rest/openehr/v1
+
+      - name: Dump EHRbase logs on failure
+        if: failure()
+        working-directory: dev
+        run: docker compose logs ehrbase-postgres ehrbase
 
   lint:
     name: Lint YAML + PowerShell
