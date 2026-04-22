@@ -171,7 +171,8 @@ jobs:
         run: pip install yamllint
 
       - name: yamllint
-        run: yamllint -d "{extends: default, rules: {line-length: disable, document-start: disable, truthy: {check-keys: false}}}" .github dev
+        run: |
+          yamllint -d "{extends: default, rules: {line-length: disable, document-start: disable, truthy: {check-keys: false}}}" .github dev
 
       - name: PowerShell analyzer
         shell: pwsh
