@@ -12,20 +12,27 @@ if (Test-Path $envFile) {
     }
 }
 
-$port = $env:EHRBASE_PORT; if (-not $port) { $port = '8080' }
-$user = $env:EHRBASE_USER; if (-not $user) { $user = 'ehrbase' }
-$pass = $env:EHRBASE_PASSWORD; if (-not $pass) { $pass = 'ehrbase' }
+$port       = $env:EHRBASE_PORT;           if (-not $port)       { $port       = '8080' }
+$user       = $env:EHRBASE_USER;           if (-not $user)       { $user       = 'ehrbase' }
+$pass       = $env:EHRBASE_PASSWORD;       if (-not $pass)       { $pass       = 'ehrbase' }
+$adminUser  = $env:EHRBASE_ADMIN_USER;     if (-not $adminUser)  { $adminUser  = 'ehrbase_admin' }
+$adminPass  = $env:EHRBASE_ADMIN_PASSWORD; if (-not $adminPass)  { $adminPass  = 'ehrbase_admin' }
 $base = "http://localhost:$port/ehrbase"
 
-$pair = "${user}:${pass}"
-$b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($pair))
-$headers = @{ Authorization = "Basic $b64" }
+function Get-BasicHeader([string]$u, [string]$p) {
+    $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${u}:${p}"))
+    return @{ Authorization = "Basic $b64" }
+}
 
-function Probe([string]$label, [string]$method, [string]$path, [string]$body) {
+$headers      = Get-BasicHeader $user $pass
+$adminHeaders = Get-BasicHeader $adminUser $adminPass
+
+function Probe([string]$label, [string]$method, [string]$path, [string]$body, $hdrs) {
+    if (-not $hdrs) { $hdrs = $headers }
     $url = "$base$path"
     try {
         $requestArgs = @{
-            Uri = $url; Method = $method; Headers = $headers
+            Uri = $url; Method = $method; Headers = $hdrs
             SkipHttpErrorCheck = $true
         }
         if ($body) {
@@ -41,7 +48,8 @@ function Probe([string]$label, [string]$method, [string]$path, [string]$body) {
 }
 
 Write-Output "Checking EHRbase at $base"
-Probe 'management/health'   'GET'  '/management/health' $null
+# /management/* is admin-only in EHRbase 2.x — use admin credentials for it.
+Probe 'management/health'   'GET'  '/management/health' $null $adminHeaders
 Probe 'definition/template' 'GET'  '/rest/openehr/v1/definition/template/adl1.4' $null
 Probe 'query/aql'           'POST' '/rest/openehr/v1/query/aql' '{"q":"SELECT e/ehr_id/value FROM EHR e LIMIT 1"}'
 Write-Output 'All probes OK.'

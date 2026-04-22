@@ -41,8 +41,16 @@ jobs:
       - name: Install MakePQX (Microsoft.PowerQuery.SdkTools)
         shell: pwsh
         run: |
-          dotnet tool install -g Microsoft.PowerQuery.SdkTools
-          echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append
+          # SdkTools ships as a plain NuGet package (not a dotnet global tool).
+          # Fetch it, then add its tools/ directory to PATH so subsequent steps
+          # can invoke MakePQX.exe directly.
+          nuget install Microsoft.PowerQuery.SdkTools -OutputDirectory $env:RUNNER_TEMP\sdktools -ExcludeVersion
+          $tools = Join-Path $env:RUNNER_TEMP 'sdktools\Microsoft.PowerQuery.SdkTools\tools'
+          if (-not (Test-Path $tools)) {
+            throw "SdkTools tools directory not found at $tools"
+          }
+          "$tools" | Out-File -FilePath $env:GITHUB_PATH -Append
+          Write-Output "Installed MakePQX at $tools"
 
       - name: Pack .mez
         shell: pwsh
@@ -88,8 +96,9 @@ jobs:
 
       - name: Wait for EHRbase health
         run: |
+          # /management/* is admin-only in EHRbase 2.x by default.
           for i in $(seq 1 120); do
-            if curl -fsS -u ehrbase:ehrbase http://localhost:8080/ehrbase/management/health | grep -q '"UP"'; then
+            if curl -fsS -u ehrbase_admin:ehrbase_admin http://localhost:8080/ehrbase/management/health | grep -q '"UP"'; then
               echo "EHRbase is UP"
               exit 0
             fi

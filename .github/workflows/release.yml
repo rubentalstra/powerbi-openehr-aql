@@ -29,11 +29,17 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - name: Install MakePQX
+      - name: Install MakePQX (Microsoft.PowerQuery.SdkTools)
         shell: pwsh
         run: |
-          dotnet tool install -g Microsoft.PowerQuery.SdkTools
-          echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append
+          # SdkTools ships as a plain NuGet package (not a dotnet global tool).
+          nuget install Microsoft.PowerQuery.SdkTools -OutputDirectory $env:RUNNER_TEMP\sdktools -ExcludeVersion
+          $tools = Join-Path $env:RUNNER_TEMP 'sdktools\Microsoft.PowerQuery.SdkTools\tools'
+          if (-not (Test-Path $tools)) {
+            throw "SdkTools tools directory not found at $tools"
+          }
+          "$tools" | Out-File -FilePath $env:GITHUB_PATH -Append
+          Write-Output "Installed MakePQX at $tools"
 
       - name: Decode PFX from secret
         shell: pwsh
