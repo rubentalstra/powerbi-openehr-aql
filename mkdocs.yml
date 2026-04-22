@@ -51,7 +51,11 @@ markdown_extensions:
       anchor_linenums: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.tasklist:
@@ -76,18 +80,12 @@ nav:
   - Cookbook:
       - Blood pressure trend: cookbook/blood-pressure-trend.md
       - Incremental refresh: cookbook/incremental-refresh.md
-      - CDR vendor notes:
-          - EHRbase: cookbook/cdr-vendor-notes/ehrbase.md
-          - Better: cookbook/cdr-vendor-notes/better.md
-          - Code24: cookbook/cdr-vendor-notes/code24.md
-          - DIPS: cookbook/cdr-vendor-notes/dips.md
+      - EHRbase notes: cookbook/cdr-vendor-notes/ehrbase.md
   - Reference:
       - Functions: reference/functions.md
       - Options: reference/options.md
       - Error codes: reference/error-codes.md
   - Compliance:
-      - HIPAA: compliance/hipaa.md
-      - GDPR: compliance/gdpr.md
       - PHI-safe mode: compliance/phi-safe-mode.md
   - Troubleshooting: troubleshooting.md
   - Contributing:

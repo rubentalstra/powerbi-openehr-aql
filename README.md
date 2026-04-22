@@ -6,7 +6,7 @@
 
 **A native Power BI custom data connector for openEHR [Archetype Query Language](https://specifications.openehr.org/releases/QUERY/latest/AQL.html).**
 
-Run AQL against any openEHR Clinical Data Repository — EHRbase, Better Platform, Code24, DIPS — directly from Power BI Desktop. Pagination, RM-object flattening, and Power BI Service gateway refresh are handled for you.
+Run AQL against your openEHR Clinical Data Repository directly from Power BI Desktop. Pagination, RM-object flattening, and Power BI Service gateway refresh are handled for you. `v0.1.0` targets **EHRbase 2.x**; additional CDRs land in `v1.0.0`.
 
 [![CI](https://github.com/rubentalstra/powerbi-openehr-aql/actions/workflows/ci.yml/badge.svg)](https://github.com/rubentalstra/powerbi-openehr-aql/actions/workflows/ci.yml)
 [![Docs](https://github.com/rubentalstra/powerbi-openehr-aql/actions/workflows/docs.yml/badge.svg)](https://github.com/rubentalstra/powerbi-openehr-aql/actions/workflows/docs.yml)
@@ -70,37 +70,31 @@ Full reference: [Functions](https://rubentalstra.github.io/powerbi-openehr-aql/r
 
 ## Architecture
 
-```
-┌──────────────────────┐       ┌──────────────────────────────────────┐
-│ Power BI Desktop     │       │ src/OpenEHR.pq  (section document)   │
-│ • Get Data dialog    │──────▶│   ├─ OpenEHR.Contents  (nav entry)   │
-│ • Incremental refresh│       │   ├─ OpenEHR.Aql       (ad-hoc)      │
-└──────────────────────┘       │   └─ OpenEHR.StoredQuery (named)     │
-                               └───────────────┬──────────────────────┘
-                                               │
-                               ┌───────────────┴──────────────────────┐
-                               │ Aql.pqm       HTTP + auth + errors   │
-                               │ Paging.pqm    lag-one pagination     │
-                               │ Schema.pqm    RS → table + RM expand │
-                               │ Navigation.pqm  nav-table builders   │
-                               └───────────────┬──────────────────────┘
-                                               │  POST /query/aql
-                                               ▼
-                               ┌──────────────────────────────────────┐
-                               │ openEHR CDR  (EHRbase / Better / …)  │
-                               └──────────────────────────────────────┘
+```mermaid
+flowchart LR
+    PBI["Power BI Desktop<br/>+ Service"] -->|Get Data<br/>openEHR (Beta)| SEC["src/OpenEHR.pq<br/>(section document)"]
+    SEC --> F1["OpenEHR.Contents<br/>nav entry"]
+    SEC --> F2["OpenEHR.Aql<br/>ad-hoc"]
+    SEC --> F3["OpenEHR.StoredQuery<br/>named"]
+    F1 --> LIB
+    F2 --> LIB
+    F3 --> LIB
+    subgraph LIB[library modules]
+      AQ[Aql.pqm<br/>HTTP + auth + errors]
+      PG[Paging.pqm<br/>lag-one pagination]
+      SC[Schema.pqm<br/>RS → table + RM expand]
+      NV[Navigation.pqm<br/>nav-table builders]
+      AU[Auth.pqm<br/>OAuth2 PKCE]
+    end
+    LIB -->|POST /query/aql| CDR[("openEHR CDR<br/>EHRbase 2.x")]
 ```
 
 ## Compatibility
 
-| CDR              | Status                                |
-| ---------------- | ------------------------------------- |
-| EHRbase 2.x      | Targeted for v0.1.0 (in development)  |
-| Better Platform  | Planned for v1.0.0                    |
-| Code24           | Planned for v1.0.0                    |
-| DIPS             | Planned for v1.0.0                    |
-
-Tested against another CDR? File a [CDR compatibility report](https://github.com/rubentalstra/powerbi-openehr-aql/issues/new?template=cdr_compatibility.yml).
+| CDR              | Status                                     |
+| ---------------- | ------------------------------------------ |
+| **EHRbase 2.x**  | **Targeted for v0.1.0 — in active development** |
+| Other CDRs       | Post-v0.1.0. File a [CDR compatibility report](https://github.com/rubentalstra/powerbi-openehr-aql/issues/new?template=cdr_compatibility.yml) to vote one up. |
 
 ## Project resources
 
