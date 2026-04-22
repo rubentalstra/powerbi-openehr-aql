@@ -1,8 +1,10 @@
-// Aql.pqm — HTTP transport for openEHR AQL.
+// Aql.pqm — HTTP transport for openEHR AQL + stored queries.
 //
-// Public members:
-//   Execute(cdrBaseUrl, aql, queryParameters?, offset?, fetchCount?, timeout?)  -> record
-//   AuthHeader()                                                                 -> record
+// Public members (returned as a record):
+//   Execute(cdrBaseUrl, aql, queryParameters?, offset?, fetchCount?, timeout?) -> record
+//   ExecuteStored(cdrBaseUrl, qualifiedName, version?)                         -> record
+//   AuthHeader()                                                               -> record
+//   RaiseError(status, responseBody, contextText)                              -> error
 //
 // Gotchas enforced here:
 //   - Web.Contents base URL is the un-mutated `cdrBaseUrl` argument (static from PQ's view).
@@ -23,8 +25,8 @@ let
         let
             body = [q = aql]
                 & (if queryParameters <> null then [query_parameters = queryParameters] else [])
-                & (if offset         <> null then [offset           = offset]          else [])
-                & (if fetchCount     <> null then [fetch            = fetchCount]      else []),
+                & (if offset         <> null then [offset            = offset]          else [])
+                & (if fetchCount     <> null then [fetch             = fetchCount]      else []),
             bodyJson = Json.FromValue(body),
             headers  = [#"Content-Type" = "application/json", #"Accept" = "application/json"] & AuthHeader(),
             response = Web.Contents(
@@ -49,6 +51,35 @@ let
         in
             result,
 
+    // GET a stored query by qualified name (+ optional version). Returns the raw
+    // result-set record ({columns, rows, ...}) — callers wrap it via Schema.ResultSetToTable.
+    ExecuteStored = (
+        cdrBaseUrl as text,
+        qualifiedName as text,
+        optional version as nullable text
+    ) as record =>
+        let
+            path = if version <> null and version <> ""
+                then "query/" & qualifiedName & "/" & version
+                else "query/" & qualifiedName,
+            response = Web.Contents(
+                cdrBaseUrl,
+                [
+                    RelativePath         = path,
+                    Headers              = [#"Accept" = "application/json"] & AuthHeader(),
+                    ManualStatusHandling = {400, 401, 403, 404, 408, 500},
+                    ExcludedFromCacheKey = {"Authorization"}
+                ]
+            ),
+            buffered = Binary.Buffer(response),
+            meta     = Value.Metadata(response),
+            status   = meta[Response.Status]
+        in
+            if status >= 200 and status < 300 then
+                Json.Document(buffered)
+            else
+                RaiseError(status, buffered, qualifiedName),
+
     AuthHeader = () as record =>
         let
             cred = Extension.CurrentCredential(),
@@ -71,15 +102,15 @@ let
         in
             header,
 
-    RaiseError = (status as number, responseBody as binary, aql as text) as any =>
+    RaiseError = (status as number, responseBody as binary, contextText as text) as any =>
         let
             asText = try Text.FromBinary(responseBody) otherwise "",
             asJson = try Json.Document(responseBody) otherwise null,
             // EHRbase puts a human message under either `message` or `error`; fall back to body text.
             message =
-                if asJson <> null and Record.HasFields(asJson, {"message"}) then
+                if asJson <> null and asJson is record and Record.HasFields(asJson, {"message"}) then
                     asJson[message]
-                else if asJson <> null and Record.HasFields(asJson, {"error"}) then
+                else if asJson <> null and asJson is record and Record.HasFields(asJson, {"error"}) then
                     asJson[error]
                 else if asText <> "" then asText
                 else "HTTP " & Number.ToText(status),
@@ -91,15 +122,16 @@ let
                 else if status = 409 then "OpenEHR.ConflictError"
                 else "OpenEHR.HttpError",
             details = [
-                Status = status,
-                Body   = if asJson <> null then asJson else asText,
-                Aql    = aql
+                Status  = status,
+                Body    = if asJson <> null then asJson else asText,
+                Context = contextText
             ]
         in
             error Error.Record(category, message, details)
 in
     [
-        Execute    = Execute,
-        AuthHeader = AuthHeader,
-        RaiseError = RaiseError
+        Execute       = Execute,
+        ExecuteStored = ExecuteStored,
+        AuthHeader    = AuthHeader,
+        RaiseError    = RaiseError
     ]

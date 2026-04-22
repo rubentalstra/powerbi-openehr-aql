@@ -1,0 +1,73 @@
+// Paging.pqm — lag-one pagination over AQL result sets.
+//
+// Pattern copied from TripPin Part 5:
+// https://learn.microsoft.com/en-us/power-query/samples/trippin/5-paging/readme
+//
+// We drive pagination off row-count: a page returning fewer than `pageSize` rows is
+// the last page. Every page response is Binary.Buffer'd inside Aql.Execute so PQ's
+// lazy evaluator can't re-fetch it.
+//
+// This module is a factory: the main connector passes in the already-loaded Aql
+// record so we don't have to call Extension.LoadFunction from here (it isn't in
+// #shared when a .pqm is evaluated, and cross-module loading would fail).
+
+(aql as record) as record =>
+    let
+        GetAllPages = (
+            cdrBaseUrl as text,
+            aqlText as text,
+            optional queryParameters as nullable record,
+            optional pageSize as nullable number,
+            optional timeout as nullable duration
+        ) as list =>
+            let
+                size  = if pageSize <> null then pageSize else 1000,
+
+                fetch = (offset as number) as record =>
+                    aql[Execute](cdrBaseUrl, aqlText, queryParameters, offset, size, timeout),
+
+                seed  = fetch(0),
+
+                pages = List.Generate(
+                    () => [
+                        page       = seed,
+                        nextOffset = size,
+                        hasMore    = List.Count(seed[rows]) = size
+                    ],
+                    each [page] <> null,
+                    each
+                        if not [hasMore] then
+                            [page = null, nextOffset = null, hasMore = false]
+                        else
+                            let
+                                next  = fetch([nextOffset]),
+                                count = List.Count(next[rows])
+                            in
+                                [page = next, nextOffset = [nextOffset] + size, hasMore = count = size],
+                    each [page]
+                )
+            in
+                pages,
+
+        // Flatten all page `rows` into a single result-set record — callers usually want this.
+        GetAllRows = (
+            cdrBaseUrl as text,
+            aqlText as text,
+            optional queryParameters as nullable record,
+            optional pageSize as nullable number,
+            optional timeout as nullable duration
+        ) as record =>
+            let
+                allPages = GetAllPages(cdrBaseUrl, aqlText, queryParameters, pageSize, timeout),
+                first    = List.First(allPages),
+                rows     = List.Combine(List.Transform(allPages, each _[rows])),
+                columns  = if first <> null then first[columns] else {},
+                meta     = if first <> null and Record.HasFields(first, {"meta"}) then first[meta] else [],
+                q        = if first <> null and Record.HasFields(first, {"q"})    then first[q]    else aqlText
+            in
+                [meta = meta, q = q, columns = columns, rows = rows]
+    in
+        [
+            GetAllPages = GetAllPages,
+            GetAllRows  = GetAllRows
+        ]

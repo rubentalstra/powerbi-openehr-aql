@@ -3,7 +3,7 @@
 The v0.1.0 release is signed with a **self-signed** certificate. To load the connector without relaxing Power BI Desktop's security setting, import the public `.cer` shipped with the release into Windows's trusted cert stores so the signature chains to a locally-trusted root.
 
 !!! info "Why self-signed?"
-    A real EV/OV code-signing certificate (Sectigo, DigiCert, SSL.com) costs ~US$300–600/year. We want to validate the connector first and spend on a real cert once there's demand. See the [roadmap](../../ROADMAP.md) for when we plan to revisit this.
+    A real EV/OV code-signing certificate (Sectigo, DigiCert, SSL.com) costs ~US$300–600/year. We want to validate the connector first and spend on a real cert once there's demand. See the [roadmap](https://github.com/rubentalstra/powerbi-openehr-aql/blob/main/ROADMAP.md) for when we plan to revisit this.
 
 ## Prerequisites
 

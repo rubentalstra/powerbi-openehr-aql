@@ -24,9 +24,9 @@
     <Content Include="OpenEHR32.png" />
     <Content Include="OpenEHR40.png" />
     <Content Include="OpenEHR48.png" />
-    <Content Include="lib\Aql.pqm" />
-    <Content Include="lib\Paging.pqm" />
-    <Content Include="lib\Schema.pqm" />
-    <Content Include="lib\Navigation.pqm" />
+    <Content Include="Aql.pqm" />
+    <Content Include="Paging.pqm" />
+    <Content Include="Schema.pqm" />
+    <Content Include="Navigation.pqm" />
   </ItemGroup>
 </Project>

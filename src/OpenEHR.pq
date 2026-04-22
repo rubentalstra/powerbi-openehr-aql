@@ -12,6 +12,12 @@ section OpenEHR;
 // Module loader (pattern from Microsoft DataConnectors samples).
 //   Each *.pqm under src/ is packed as an embedded resource by MakePQX and
 //   reached here via Extension.Contents.
+//
+//   Aql.pqm and Schema.pqm are records with no cross-module deps and can be
+//   loaded directly. Paging.pqm and Navigation.pqm are factory functions that
+//   take their dependencies as parameters — this keeps every .pqm self-contained
+//   (Extension.LoadFunction is a local helper in this section, not in #shared,
+//   so it cannot be called from inside another .pqm during Expression.Evaluate).
 // ---------------------------------------------------------------------------
 Extension.LoadFunction = (name as text) =>
     let
@@ -21,9 +27,9 @@ Extension.LoadFunction = (name as text) =>
         Expression.Evaluate(asText, #shared);
 
 Aql        = Extension.LoadFunction("Aql.pqm");
-Paging     = Extension.LoadFunction("Paging.pqm");
 Schema     = Extension.LoadFunction("Schema.pqm");
-Navigation = Extension.LoadFunction("Navigation.pqm");
+Paging     = Extension.LoadFunction("Paging.pqm")(Aql);
+Navigation = Extension.LoadFunction("Navigation.pqm")(Aql, Paging, Schema);
 
 // ---------------------------------------------------------------------------
 // Public function: OpenEHR.Aql
@@ -85,36 +91,10 @@ OpenEHR.StoredQueryImpl = (
 ) as table =>
     let
         opts   = if options = null then [] else options,
-        expand = Record.FieldOrDefault(opts, "ExpandRmObjects", true)
+        expand = Record.FieldOrDefault(opts, "ExpandRmObjects", true),
+        rs     = Aql[ExecuteStored](cdrBaseUrl, qualifiedName, version)
     in
-        Schema[ResultSetToTable](
-            // Navigation module owns the stored-query endpoint path shape.
-            _RunStoredQuery(cdrBaseUrl, qualifiedName, version),
-            expand
-        );
-
-_RunStoredQuery = (cdrBaseUrl as text, qualifiedName as text, optional version as nullable text) as record =>
-    let
-        path     = if version <> null and version <> ""
-            then "query/" & qualifiedName & "/" & version
-            else "query/" & qualifiedName,
-        response = Web.Contents(
-            cdrBaseUrl,
-            [
-                RelativePath         = path,
-                Headers              = [#"Accept" = "application/json"] & Aql[AuthHeader](),
-                ManualStatusHandling = {400, 401, 403, 404, 408, 500},
-                ExcludedFromCacheKey = {"Authorization"}
-            ]
-        ),
-        buffered = Binary.Buffer(response),
-        meta     = Value.Metadata(response),
-        status   = meta[Response.Status]
-    in
-        if status >= 200 and status < 300 then
-            Json.Document(buffered)
-        else
-            Aql[RaiseError](status, buffered, qualifiedName);
+        Schema[ResultSetToTable](rs, expand);
 
 OpenEHR.StoredQueryType = type function (
     cdrBaseUrl as (type text meta [
@@ -165,8 +145,8 @@ OpenEHR = [
     // TestConnection is MANDATORY — missing it = silent gateway-refresh failure.
     TestConnection = (dataSourcePath) =>
         let
-            parsed = Json.Document(dataSourcePath),
-            url    = if parsed is record then parsed[cdrBaseUrl] else dataSourcePath
+            parsed = try Json.Document(dataSourcePath) otherwise null,
+            url    = if parsed <> null and parsed is record then parsed[cdrBaseUrl] else dataSourcePath
         in
             { "OpenEHR.Contents", url },
 
@@ -183,13 +163,13 @@ OpenEHR = [
 ];
 
 OpenEHR.Publish = [
-    Beta             = true,
-    Category         = "Online Services",
-    ButtonText       = { Extension.LoadString("ButtonTitle"), Extension.LoadString("ButtonHelp") },
-    LearnMoreUrl     = "https://github.com/rubentalstra/powerbi-openehr-aql",
+    Beta                = true,
+    Category            = "Online Services",
+    ButtonText          = { Extension.LoadString("ButtonTitle"), Extension.LoadString("ButtonHelp") },
+    LearnMoreUrl        = "https://github.com/rubentalstra/powerbi-openehr-aql",
     SupportsDirectQuery = false,
-    SourceImage      = OpenEHR.Icons,
-    SourceTypeImage  = OpenEHR.Icons
+    SourceImage         = OpenEHR.Icons,
+    SourceTypeImage     = OpenEHR.Icons
 ];
 
 OpenEHR.Icons = [

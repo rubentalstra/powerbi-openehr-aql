@@ -31,11 +31,10 @@ src/                           M sources
   OpenEHR.proj                 MSBuild project
   resources.resx               Localized strings
   OpenEHR{16,20,24,32,40,48}.png
-  lib/
-    Aql.pqm                    HTTP + AQL execution
-    Schema.pqm                 Result-set → table + RM expansion
-    Paging.pqm                 GetAllPages
-    Navigation.pqm             Nav-table helper + builders
+  Aql.pqm                      HTTP + AQL execution
+  Schema.pqm                   Result-set → table + RM expansion
+  Paging.pqm                   GetAllPages (factory: takes Aql)
+  Navigation.pqm               Nav-table helper + builders (factory: takes Aql, Paging, Schema)
 tests/
   fixtures/canonical-queries.json
   integration/run-canonical.sh

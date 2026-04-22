@@ -46,7 +46,9 @@ function New-EHR([string]$subjectId, [string]$subjectNs) {
         name = @{ value = 'EHR Status' }
         archetype_node_id = 'openEHR-EHR-EHR_STATUS.generic.v1'
         subject = @{
+            '_type' = 'PARTY_SELF'
             external_ref = @{
+                '_type' = 'PARTY_REF'
                 id = @{ '_type' = 'GENERIC_ID'; value = $subjectId; scheme = 'id_scheme' }
                 namespace = $subjectNs
                 type = 'PERSON'

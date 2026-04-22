@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
 
@@ -60,7 +60,7 @@ jobs:
           "mez=$($mez.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: OpenEHR-mez
           path: ${{ steps.locate.outputs.mez }}
@@ -70,6 +70,9 @@ jobs:
     name: Canonical AQL smoke tests
     runs-on: ubuntu-latest
     services:
+      # Postgres service seeds the EHRbase-owned DB + roles from the compose
+      # init scripts. CI intentionally uses the same init script path as
+      # dev/docker-compose.yml (dev/postgres-init/*.sql) so behaviour matches.
       ehrbase-postgres:
         image: postgres:16.4-alpine
         env:
@@ -86,40 +89,57 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+      # EHRbase 2.x is Spring Boot — configuration goes through SPRING_*
+      # env vars, not the legacy DB_* names used by EHRbase 0.x/1.x.
       ehrbase:
         image: ehrbase/ehrbase:2.15.0
         env:
-          DB_URL: jdbc:postgresql://ehrbase-postgres:5432/ehrbase
-          DB_USER: ehrbase
-          DB_PASS: ehrbase
-          DB_USER_ADMIN: ehrbase_admin
-          DB_PASS_ADMIN: ehrbase_admin
+          SPRING_DATASOURCE_URL: jdbc:postgresql://ehrbase-postgres:5432/ehrbase
+          SPRING_DATASOURCE_USERNAME: ehrbase
+          SPRING_DATASOURCE_PASSWORD: ehrbase
+          SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "10"
+          SPRING_FLYWAY_USER: ehrbase_admin
+          SPRING_FLYWAY_PASSWORD: ehrbase_admin
           SECURITY_AUTHTYPE: BASIC
           SECURITY_AUTHUSER: ehrbase
           SECURITY_AUTHPASSWORD: ehrbase
           SECURITY_AUTHADMINUSER: ehrbase_admin
           SECURITY_AUTHADMINPASSWORD: ehrbase_admin
+          MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus,env"
+          MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
         ports: ["8080:8080"]
         options: >-
           --health-cmd "wget -qO- http://localhost:8080/ehrbase/management/health || exit 1"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 18
-          --health-start-period 30s
+          --health-retries 30
+          --health-start-period 60s
 
     steps:
       - uses: actions/checkout@v6
 
+      - name: Seed Postgres schema (matches dev/docker-compose.yml init scripts)
+        env:
+          PGPASSWORD: postgres
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+          for f in dev/postgres-init/*.sql; do
+            echo "applying $f"
+            psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"
+          done
+
       - name: Wait for EHRbase health
         run: |
-          for i in $(seq 1 90); do
+          for i in $(seq 1 120); do
             if curl -fsS -u ehrbase:ehrbase http://localhost:8080/ehrbase/management/health | grep -q '"UP"'; then
               echo "EHRbase is UP"
               exit 0
             fi
             sleep 2
           done
-          echo "EHRbase did not become healthy in 180s" >&2
+          echo "EHRbase did not become healthy in 240s" >&2
+          docker ps -a || true
           exit 1
 
       - name: Install jq

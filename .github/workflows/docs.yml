@@ -2,22 +2,28 @@ name: docs
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
       - "docs/**"
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
+# Deploys via the GitHub Pages artifact flow — no gh-pages branch, no commits,
+# so there's no signing question. Requires repo Settings → Pages → Source set
+# to "GitHub Actions".
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
-  group: docs
-  cancel-in-progress: true
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
+    name: Build MkDocs site
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -30,8 +36,39 @@ jobs:
           cache: pip
           cache-dependency-path: docs/requirements.txt
 
+      # Material stores plugin build artifacts (social cards, optimize, etc.)
+      # under ~/.cache. Rotates with requirements.txt hash so upgrades bust it.
+      - name: Cache MkDocs Material build artifacts
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache
+          key: mkdocs-material-${{ runner.os }}-${{ hashFiles('docs/requirements.txt') }}-${{ github.run_id }}
+          restore-keys: |
+            mkdocs-material-${{ runner.os }}-${{ hashFiles('docs/requirements.txt') }}-
+            mkdocs-material-${{ runner.os }}-
+
       - name: Install MkDocs Material
         run: pip install -r docs/requirements.txt
 
-      - name: Deploy to gh-pages
-        run: mkdocs gh-deploy --force --clean
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+
+      - name: Build site
+        run: mkdocs build --strict --site-dir _site
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

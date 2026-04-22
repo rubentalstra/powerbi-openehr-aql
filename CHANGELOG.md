@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 - Initial `src/` connector source: `OpenEHR.pq` (section document with `OpenEHR.Contents`, `OpenEHR.Aql`, `OpenEHR.StoredQuery`, `TestConnection`, Basic auth + Anonymous).
-- Library modules: `lib/Aql.pqm` (HTTP transport), `lib/Paging.pqm` (lag-one pagination), `lib/Schema.pqm` (result-set → table + RM-object flattening), `lib/Navigation.pqm` (nav-table helper + builders).
+- Library modules: `Aql.pqm` (HTTP transport + stored-query fetch), `Paging.pqm` (lag-one pagination, factory taking `Aql`), `Schema.pqm` (result-set → table + RM-object flattening, per-column type sampling), `Navigation.pqm` (nav-table helper + builders, factory taking `Aql`/`Paging`/`Schema`).
 - MSBuild project `src/OpenEHR.proj` and localized strings `src/resources.resx`.
 - Connector icons at 16/20/24/32/40/48 px generated from `openehr_logo.png`.
 - Dev environment: `dev/docker-compose.yml` (Postgres 16 + EHRbase 2.15 + Keycloak 26 placeholder), seed-data scaffolding, `check-health.{sh,ps1}`, `load-seed.{sh,ps1}`, `new-self-signed-cert.ps1`.

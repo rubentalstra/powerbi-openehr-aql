@@ -5,7 +5,9 @@
 //
 // Flattening policy (per IMPLEMENTATION_PLAN.md gotcha list):
 //   - Column names prefer `name` (the AS alias); fall back to `path` when missing.
-//   - Type detection samples the first NON-NULL row — never row 0 blindly.
+//   - Type detection samples the first NON-NULL value PER COLUMN, not row-wise.
+//     A row with one RM column populated but another null is the common case, so
+//     row-wise "first fully-populated row" would drop columns that are sparsely filled.
 //   - Known RM types expand into scalar columns via RmExpanders.
 //   - Unknown record-shaped values fall back to `<col>_json` text.
 //   - Empty result sets still return a typed empty table so schema is stable.
@@ -67,10 +69,11 @@ let
                 then #table(uniqueNames, {})
                 else #table(uniqueNames, rows),
 
-            // Sample the first non-null value per column for type detection.
-            sampleRow = FirstNonNullRow(rows),
+            // Per-column sampling: for each column index, find the first non-null
+            // value across all rows. That's the value we probe for `_type`.
+            samplesByCol = SampleByColumn(rows, List.Count(uniqueNames)),
 
-            result    = if expand then ExpandRmColumns(baseTable, sampleRow, uniqueNames) else baseTable
+            result    = if expand then ExpandRmColumns(baseTable, samplesByCol, uniqueNames) else baseTable
         in
             result,
 
@@ -81,10 +84,10 @@ let
                 [out = {}, seen = []],
                 (state, name) =>
                     let
-                        safeName = if name = null or name = "" then "col" else name,
+                        safeName   = if name = null or name = "" then "col" else name,
                         priorCount = Record.FieldOrDefault(state[seen], safeName, 0),
-                        finalName = if priorCount = 0 then safeName else safeName & "_" & Number.ToText(priorCount + 1),
-                        nextSeen = Record.AddField(
+                        finalName  = if priorCount = 0 then safeName else safeName & "_" & Number.ToText(priorCount + 1),
+                        nextSeen   = Record.AddField(
                             Record.RemoveFields(state[seen], {safeName}, MissingField.Ignore),
                             safeName,
                             priorCount + 1
@@ -95,32 +98,39 @@ let
         in
             acc[out],
 
-    FirstNonNullRow = (rows as list) as nullable list =>
-        List.First(
-            List.Select(rows, each List.MatchesAny(_, each _ <> null)),
-            null
-        ),
-
-    ExpandRmColumns = (t as table, sample as nullable list, colNames as list) as table =>
-        if sample = null then
-            t
+    SampleByColumn = (rows as list, colCount as number) as list =>
+        if colCount = 0 then
+            {}
         else
-            List.Accumulate(
-                List.Positions(colNames),
-                t,
-                (acc, i) =>
-                    let
-                        colName = colNames{i},
-                        cellSample = try sample{i} otherwise null,
-                        rmType  = if cellSample is record then Record.FieldOrDefault(cellSample, "_type", null) else null
-                    in
-                        if rmType <> null and Record.HasFields(RmExpanders, {rmType}) then
-                            ExpandKnownRm(acc, colName, Record.Field(RmExpanders, rmType))
-                        else if cellSample is record then
-                            FallbackJsonColumn(acc, colName)
-                        else
-                            acc
+            List.Transform(
+                List.Numbers(0, colCount),
+                (i) =>
+                    List.First(
+                        List.Select(
+                            List.Transform(rows, (r) => try r{i} otherwise null),
+                            (v) => v <> null
+                        ),
+                        null
+                    )
             ),
+
+    ExpandRmColumns = (t as table, samples as list, colNames as list) as table =>
+        List.Accumulate(
+            List.Positions(colNames),
+            t,
+            (acc, i) =>
+                let
+                    colName    = colNames{i},
+                    cellSample = try samples{i} otherwise null,
+                    rmType     = if cellSample is record then Record.FieldOrDefault(cellSample, "_type", null) else null
+                in
+                    if rmType <> null and Record.HasFields(RmExpanders, {rmType}) then
+                        ExpandKnownRm(acc, colName, Record.Field(RmExpanders, rmType))
+                    else if cellSample is record then
+                        FallbackJsonColumn(acc, colName)
+                    else
+                        acc
+        ),
 
     ExpandKnownRm = (t as table, colName as text, expander as function) as table =>
         let
@@ -136,7 +146,7 @@ let
                 List.Select(Table.Column(withExpanded, tmpCol), each _ <> null),
                 null
             ),
-            fields = if sampleExpansion <> null then Record.FieldNames(sampleExpansion) else {},
+            fields   = if sampleExpansion <> null then Record.FieldNames(sampleExpansion) else {},
             newNames = List.Transform(fields, each colName & _),
             expanded = if List.IsEmpty(fields)
                 then Table.RemoveColumns(withExpanded, {tmpCol})

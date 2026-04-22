@@ -1,0 +1,133 @@
+// Navigation.pqm — nav-table helper + builders for OpenEHR.Contents.
+//
+// `Table.ToNavigationTable` is NOT built into Power Query M — every connector
+// copies it from the docs: https://learn.microsoft.com/en-us/power-query/handling-navigation-tables
+//
+// Factory module: the main connector passes in already-loaded Aql/Paging/Schema
+// records. We avoid calling Extension.LoadFunction from within a .pqm because
+// that helper isn't in #shared when the .pqm is evaluated.
+
+(aql as record, paging as record, schema as record) as record =>
+    let
+        Table.ToNavigationTable = (
+            table             as table,
+            keyColumns        as list,
+            nameColumn        as text,
+            dataColumn        as text,
+            itemKindColumn    as text,
+            itemNameColumn    as text,
+            isLeafColumn      as text
+        ) as table =>
+            let
+                tableType    = Value.Type(table),
+                newTableType = Type.AddTableKey(tableType, keyColumns, true) meta [
+                    NavigationTable.NameColumn     = nameColumn,
+                    NavigationTable.DataColumn     = dataColumn,
+                    NavigationTable.ItemKindColumn = itemKindColumn,
+                    Preview.DelayColumn            = itemNameColumn,
+                    NavigationTable.IsLeafColumn   = isLeafColumn
+                ],
+                navigationTable = Value.ReplaceType(table, newTableType)
+            in
+                navigationTable,
+
+        // Build the top-level navigator shown after connecting.
+        BuildRoot = (cdrBaseUrl as text, adHocFn as function) as table =>
+            let
+                objects = #table(
+                    {"Name",           "Key",       "Data",                             "ItemKind", "ItemName", "IsLeaf"},
+                    {
+                        {"Ad-hoc AQL",     "aql",       adHocFn,                            "Function", "Function", true},
+                        {"Stored Queries", "stored",    BuildStoredQueries(cdrBaseUrl),     "Folder",   "Folder",   false},
+                        {"Templates",      "templates", BuildTemplatesTable(cdrBaseUrl),    "Table",    "Table",    true},
+                        {"EHRs",           "ehrs",      BuildEhrsTable(cdrBaseUrl),         "Table",    "Table",    true}
+                    }
+                )
+            in
+                Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf"),
+
+        BuildStoredQueries = (cdrBaseUrl as text) as table =>
+            let
+                response = Web.Contents(
+                    cdrBaseUrl,
+                    [
+                        RelativePath         = "definition/query",
+                        Headers              = [#"Accept" = "application/json"] & aql[AuthHeader](),
+                        ManualStatusHandling = {401, 403, 404, 500},
+                        ExcludedFromCacheKey = {"Authorization"}
+                    ]
+                ),
+                parsed = Json.Document(response),
+                items  = if parsed is list then parsed else Record.FieldOrDefault(parsed, "items", {}),
+                // Build a base table carrying qname + version so the Data column
+                // can lazily materialise each row via Table.AddColumn(each ...).
+                baseRows = List.Transform(items, (q) =>
+                    let
+                        qname   = Record.FieldOrDefault(q, "qualified_name", Record.FieldOrDefault(q, "name", "unknown")),
+                        version = Record.FieldOrDefault(q, "version", null),
+                        leafKey = if version <> null then qname & "/" & version else qname
+                    in
+                        [Name = qname, Key = leafKey, qname = qname, version = version]
+                ),
+                tbl0 = Table.FromRecords(
+                    baseRows,
+                    type table [Name = text, Key = text, qname = text, version = nullable text]
+                ),
+                withData = Table.AddColumn(tbl0, "Data", each RunStoredQuery(cdrBaseUrl, [qname], [version])),
+                withKinds = Table.AddColumn(
+                    Table.AddColumn(
+                        Table.AddColumn(withData, "ItemKind", each "Function"),
+                        "ItemName",
+                        each "Function"
+                    ),
+                    "IsLeaf",
+                    each true
+                ),
+                final = Table.RemoveColumns(withKinds, {"qname", "version"}, MissingField.Ignore),
+                navCols = Table.SelectColumns(final, {"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"})
+            in
+                Table.ToNavigationTable(navCols, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf"),
+
+        RunStoredQuery = (cdrBaseUrl as text, qualifiedName as text, optional version as nullable text) as table =>
+            schema[ResultSetToTable](aql[ExecuteStored](cdrBaseUrl, qualifiedName, version), true),
+
+        BuildTemplatesTable = (cdrBaseUrl as text) as table =>
+            let
+                response = Web.Contents(
+                    cdrBaseUrl,
+                    [
+                        RelativePath         = "definition/template/adl1.4",
+                        Headers              = [#"Accept" = "application/json"] & aql[AuthHeader](),
+                        ManualStatusHandling = {401, 403, 404, 500},
+                        ExcludedFromCacheKey = {"Authorization"}
+                    ]
+                ),
+                parsed = Json.Document(response),
+                items  = if parsed is list then parsed else Record.FieldOrDefault(parsed, "templates", {}),
+                table0 = Table.FromList(items, Splitter.SplitByNothing(), {"Record"}, null, ExtraValues.Error),
+                // Tolerate missing fields — OPT listings vary between CDRs.
+                fields   = {"template_id", "concept", "archetype_id", "created_timestamp"},
+                expanded = Table.ExpandRecordColumn(table0, "Record", fields, fields, MissingField.UseNull)
+            in
+                expanded,
+
+        BuildEhrsTable = (cdrBaseUrl as text) as table =>
+            let
+                rs = paging[GetAllRows](
+                    cdrBaseUrl,
+                    "SELECT e/ehr_id/value AS EhrId, e/ehr_status/subject/external_ref/id/value AS SubjectId FROM EHR e",
+                    null,
+                    1000,
+                    null
+                )
+            in
+                schema[ResultSetToTable](rs, true)
+    in
+        [
+            #"Table.ToNavigationTable" = Table.ToNavigationTable,
+            BuildRoot                  = BuildRoot,
+            BuildStoredQueries         = BuildStoredQueries,
+            RunStoredQuery             = RunStoredQuery,
+            BuildTemplatesTable        = BuildTemplatesTable,
+            BuildEhrsTable             = BuildEhrsTable
+        ]
