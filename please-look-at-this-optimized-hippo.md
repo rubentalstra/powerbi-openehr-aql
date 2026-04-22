@@ -92,7 +92,7 @@ Tasks ordered for minimum churn. Source-plan tasks in brackets.
 - `.claude/commands/test-aql.md` — accepts AQL string arg, runs via `curl` against local EHRbase, pretty-prints JSON via `jq`
 - `.claude/commands/release.md` — bumps version in `version.txt`, updates `CHANGELOG.md`, tags `v$VERSION`, pushes
 - `.claude/commands/spec.md` — accepts topic arg; uses `WebFetch` against the relevant openEHR / Power Query / TripPin spec page
-- `.claude/commands/review.md` — runs Claude through `src/` with critique prompt
+- `.claude/commands/review.md` — runs Claude through the repo-root connector files with critique prompt
 
 **Note on Task 0.3 (local tooling):** Skipped as a discrete step — most of it is environment setup the user does once. Tracked instead in `CLAUDE.md` "Prereqs" section. macOS-relevant subset: `git`, Docker Desktop for Mac, VS Code + Power Query SDK extension, .NET 10 SDK (`brew install --cask dotnet-sdk`), Node.js 24 LTS (`brew install node@24`), PowerShell 7.6 (`brew install --cask powershell`), `yamllint` (`brew install yamllint`), `jq` (`brew install jq`).
 
@@ -106,14 +106,15 @@ Tasks ordered for minimum churn. Source-plan tasks in brackets.
 2. Files under `src/`:
    - `OpenEHR.pq` — section document with hello-world per source plan
    - `OpenEHR.query.pq` — dev test harness
-   - `OpenEHR.proj` — MSBuild project file (template from [DataConnectors samples](https://github.com/microsoft/DataConnectors/tree/master/samples))
+   - `.pqignore` — excludes local non-connector files from `MakePQX compile`
+   - `.vscode/settings.json` — points the Power Query SDK at `OpenEHR.query.pq` / `OpenEHR.mez`
    - `resources.resx` — `DataSourceLabel`, `ButtonTitle`, `ButtonHelp`, error message keys
    - `OpenEHR{16,20,24,32,40,48}.png` — placeholder icons (solid-color squares with letter, generated via `magick` or hand-drawn; designer pass deferred)
 3. CI workflow (`.github/workflows/ci.yml`, see Step 11) builds and uploads `OpenEHR.mez` as artifact.
 
 **Lock now:** `DataSource.Kind = "OpenEHR"` — never change after v0.1.0; changing orphans every saved credential.
 
-**Verify (CI):** `MakePQX pack` succeeds on `windows-latest`; `.mez`/`.pqx` artifact uploaded.
+**Verify (CI):** `MakePQX compile` succeeds on `windows-latest`; `.mez`/`.pqx` artifact uploaded.
 **Verify (deferred — user on Windows):** copy `.pqx` to `%USERPROFILE%\Documents\Power BI Desktop\Custom Connectors\`; "openEHR (Beta)" appears in Get Data → Other; 3-row table returns.
 
 ### Step 7 — Basic Auth [Task 1.2]
@@ -127,7 +128,7 @@ Modify `src/OpenEHR.pq`:
 **Verify (deferred):** Power BI Desktop prompts for creds, persists, surfaces `OpenEHR.AuthError` on bad creds, omits creds from saved `.pbix` (grep test).
 
 ### Step 8 — AQL execution [Task 1.3]
-**Refactor:** Move HTTP client to `src/lib/Aql.pqm` once it exists.
+**Refactor:** Move HTTP client to `src/Aql.pqm`.
 - `ExecuteAql(cdrBaseUrl, aql, optional params, optional offset, optional fetch)` — POST `/query/aql`
 - **Critical pattern:** `Web.Contents(staticBase, [RelativePath = "query/aql", Headers, Content, ManualStatusHandling = {400,401,403,404,408,409,500}])`. URL must be static; everything dynamic goes in `RelativePath`/`Query`. Source-plan gotcha #3.
 - Map status codes to error categories: `OpenEHR.AqlError` (400), `OpenEHR.AuthError` (401/403), `OpenEHR.TimeoutError` (408), `OpenEHR.HttpError` (other)
@@ -136,7 +137,7 @@ Modify `src/OpenEHR.pq`:
 **Verify (CI integration test):** spin up EHRbase via service container; run `SELECT c/uid/value AS Uid FROM EHR e CONTAINS COMPOSITION c LIMIT 10`; assert response has `meta`/`q`/`columns`/`rows`. Run an invalid AQL; assert `OpenEHR.AqlError` raised with vendor message.
 
 ### Step 9 — Result-set → table + RM-object flattening + paging [Tasks 1.4, 1.5, 1.6]
-**Files:** `src/lib/Schema.pqm`, `src/lib/Paging.pqm`.
+**Files:** `src/Schema.pqm`, `src/Paging.pqm`.
 - `ResultSetToTable(rs)` — `#table(colNames, rows)`; handle empty rows (typed empty table); fall back to `path` when `name` missing (legacy CDRs)
 - `RmExpanders` record per source plan: `DV_QUANTITY` → `_magnitude`/`_units`/`_precision`; `DV_CODED_TEXT` → `_value`/`_code`/`_terminology`; `DV_TEXT`, `DV_DATE_TIME`, `DV_BOOLEAN`, `DV_COUNT`. Unknown `_type` → `<col>_json` text column.
 - Sample **first non-null row** for type detection (gotcha — never row 0)
@@ -158,7 +159,7 @@ Modify `src/OpenEHR.pq`:
 ### Step 11 — CI pipeline [Task 1.11]
 **`.github/workflows/ci.yml`** — runs on PR + push to `main`:
 - `runs-on: windows-latest`
-- Steps: checkout → setup .NET 10 → install MakePQX (`dotnet tool install -g Microsoft.PowerQuery.SdkTools`) → spin up EHRbase via `services:` container (postgres + ehrbase) → wait for health (loop `curl /management/health`, max 90s, **not** fixed sleep) → run `dev/scripts/load-seed.ps1` → `MakePQX pack src` → run M unit tests via `MakePQX run` against test harness → upload `OpenEHR.mez` artifact
+- Steps: checkout → download/extract `Microsoft.PowerQuery.SdkTools` → spin up EHRbase via `services:` container (postgres + ehrbase) → wait for health (loop `curl /management/health`, max 90s, **not** fixed sleep) → run `dev/scripts/load-seed.ps1` → `cd src && MakePQX compile . -t OpenEHR` → run M unit tests via `cd src && MakePQX run OpenEHR.query.pq` → upload `OpenEHR.mez` artifact
 - Matrix later when adding multi-CDR (Phase 2)
 
 **`.github/workflows/codeql.yml`** — CodeQL on PowerShell helpers (`dev/scripts/*.ps1`)
@@ -238,11 +239,11 @@ Replace placeholders from Step 4 with real content:
 | Path | Purpose | Step |
 |---|---|---|
 | [src/OpenEHR.pq](src/OpenEHR.pq) | Main connector section | 6, 7, 10 |
-| [src/lib/Aql.pqm](src/lib/Aql.pqm) | HTTP + AQL execution | 8 |
-| [src/lib/Schema.pqm](src/lib/Schema.pqm) | Result-set → table + RM expansion | 9 |
-| [src/lib/Paging.pqm](src/lib/Paging.pqm) | `GetAllPages` | 9 |
-| [src/lib/Navigation.pqm](src/lib/Navigation.pqm) | Nav-table helper + builders | 10 |
-| [src/OpenEHR.proj](src/OpenEHR.proj) | MSBuild project | 6 |
+| [src/Aql.pqm](src/Aql.pqm) | HTTP + AQL execution | 8 |
+| [src/Schema.pqm](src/Schema.pqm) | Result-set → table + RM expansion | 9 |
+| [src/Paging.pqm](src/Paging.pqm) | `GetAllPages` | 9 |
+| [src/Navigation.pqm](src/Navigation.pqm) | Nav-table helper + builders | 10 |
+| [src/.pqignore](src/.pqignore) | MakePQX packaging exclusions | 6 |
 | [src/resources.resx](src/resources.resx) | Localized strings | 6 |
 | [dev/docker-compose.yml](dev/docker-compose.yml) | Local EHRbase + Postgres + Keycloak | 3 |
 | [dev/scripts/load-seed.sh](dev/scripts/load-seed.sh) | Seed loader (bash) | 3 |

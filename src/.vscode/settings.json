@@ -1,0 +1,4 @@
+{
+  "powerquery.sdk.defaultQueryFile": "${workspaceFolder}\\OpenEHR.query.pq",
+  "powerquery.sdk.defaultExtension": "${workspaceFolder}\\bin\\AnyCPU\\Debug\\OpenEHR.mez"
+}

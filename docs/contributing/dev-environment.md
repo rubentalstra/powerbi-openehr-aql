@@ -13,7 +13,7 @@ flowchart LR
       MK[mkdocs serve] --> DOCS[docs/ preview]
     end
     subgraph CI — windows-latest
-      DOT[.NET 10 SDK] --> MPQX[MakePQX pack + sign]
+      DOT[Power Query SDK Tools] --> MPQX[src/ → MakePQX compile + sign]
       MPQX --> ART[OpenEHR.pqx]
     end
     ED -.push.-> CI[GitHub Actions]
@@ -58,7 +58,7 @@ gh workflow run ci.yml
 gh run watch
 ```
 
-The workflow spins up an EHRbase service container and runs the canonical AQL integration tests against it, then packs + signs `OpenEHR.pqx` with the self-signed dev cert.
+The CI workflow spins up EHRbase for the canonical AQL smoke tests and separately builds an unsigned `src/bin/AnyCPU/Debug/OpenEHR.mez`. The release workflow signs that build into `OpenEHR.pqx`.
 
 ## Windows-only: signing locally
 
@@ -66,22 +66,26 @@ Only needed if you want a personal build to load in Power BI Desktop before CI c
 
 ```powershell
 # Tooling
-dotnet tool install -g Microsoft.PowerQuery.SdkTools
+$version = '2.153.3'
+Invoke-WebRequest "https://www.nuget.org/api/v2/package/Microsoft.PowerQuery.SdkTools/$version" -OutFile "$env:TEMP\Microsoft.PowerQuery.SdkTools.$version.zip"
+Expand-Archive "$env:TEMP\Microsoft.PowerQuery.SdkTools.$version.zip" "$env:TEMP\Microsoft.PowerQuery.SdkTools.$version" -Force
+$env:Path = "$env:TEMP\Microsoft.PowerQuery.SdkTools.$version\tools;$env:Path"
 
 # Build
-MakePQX pack src
+Set-Location src
+MakePQX compile . -t OpenEHR
 
 # Sign with the dev self-signed PFX
 MakePQX sign `
-  --certificate dev-cert.pfx `
+  --certificate ..\dev-cert.pfx `
   --password $env:CODE_SIGN_CERT_PASSWORD `
-  OpenEHR.mez
+  bin\AnyCPU\Debug\OpenEHR.mez
 ```
 
 ## Repo map
 
 ```
-src/             M source (OpenEHR.pq, *.pqm, icons, resx)
+src/             Power Query connector workspace
 tests/           Canonical AQL fixtures + integration runner
 dev/             docker-compose, scripts, seed data
 docs/            MkDocs Material content

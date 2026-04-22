@@ -1,0 +1,12 @@
+{
+  "folders": [
+    {
+      "name": "repo",
+      "path": "."
+    },
+    {
+      "name": "connector",
+      "path": "src"
+    }
+  ]
+}

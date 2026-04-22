@@ -10,7 +10,7 @@ section OpenEHR;
 
 // ---------------------------------------------------------------------------
 // Module loader (pattern from Microsoft DataConnectors samples).
-//   Each *.pqm under src/ is packed as an embedded resource by MakePQX and
+//   Each *.pqm under src/ is packed by MakePQX and
 //   reached here via Extension.Contents.
 //
 //   Aql.pqm and Schema.pqm are records with no cross-module deps and can be

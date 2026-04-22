@@ -1,0 +1,15 @@
+*.query.pq
+*.test.pq
+*.testconnection.pq
+*.testsettings.json
+*.md
+*.mproj
+*.proj
+*.sln
+bin
+out
+obj
+.vs
+.vscode
+.idea
+.git

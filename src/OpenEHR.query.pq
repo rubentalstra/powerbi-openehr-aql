@@ -1,6 +1,6 @@
 // OpenEHR.query.pq — dev test harness.
 //
-// Run with `MakePQX run src/OpenEHR.query.pq` against a local EHRbase seeded
+// Run with `MakePQX run OpenEHR.query.pq` from `src/` against a local EHRbase seeded
 // by `dev/scripts/load-seed.sh`. This file is NOT packaged into the .mez/.pqx.
 //
 // Checks cover: navigation root, ad-hoc AQL, stored-query listing,

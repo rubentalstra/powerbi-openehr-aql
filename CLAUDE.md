@@ -15,26 +15,27 @@ The exhaustive spec lives in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md);
 | Layer | Tech |
 |---|---|
 | Language | Power Query M |
-| Build | .NET 10 SDK + `Microsoft.PowerQuery.SdkTools` (`MakePQX`) |
+| Build | `Microsoft.PowerQuery.SdkTools` (`MakePQX`) in `src/` |
 | Sign | `MakePQX sign` with a self-signed PFX (real cert deferred post-v0.1.0) |
 | Dev CDR | EHRbase 2.x in Docker (`dev/docker-compose.yml`) |
 | Docs | MkDocs Material on GitHub Pages |
 | CI | GitHub Actions, `windows-latest` runner |
 | Test data | OPTs + compositions seeded by `dev/scripts/load-seed.{sh,ps1}` |
 
-## Repo layout (projected)
+## Repo layout
 
 ```
-src/                           M sources
+src/                           Power Query SDK workspace
   OpenEHR.pq                   Main section document
   OpenEHR.query.pq             Dev test harness
-  OpenEHR.proj                 MSBuild project
   resources.resx               Localized strings
   OpenEHR{16,20,24,32,40,48}.png
   Aql.pqm                      HTTP + AQL execution
   Schema.pqm                   Result-set → table + RM expansion
   Paging.pqm                   GetAllPages (factory: takes Aql)
   Navigation.pqm               Nav-table helper + builders (factory: takes Aql, Paging, Schema)
+  .pqignore                    Packaging exclusions for MakePQX
+  .vscode/                     Power Query SDK workspace settings
 tests/
   fixtures/canonical-queries.json
   integration/run-canonical.sh
@@ -72,15 +73,17 @@ mkdocs serve
 **Build / sign / test (Windows, usually via CI):**
 
 ```powershell
+# Assumes MakePQX is already on PATH from the extracted
+# Microsoft.PowerQuery.SdkTools package.
 # Build
-dotnet tool install -g Microsoft.PowerQuery.SdkTools
-MakePQX pack src
+cd src
+MakePQX compile . -t OpenEHR
 
 # Sign with self-signed cert
-MakePQX sign --certificate dev-cert.pfx --password $env:CODE_SIGN_CERT_PASSWORD OpenEHR.mez
+MakePQX sign --certificate ..\dev-cert.pfx --password $env:CODE_SIGN_CERT_PASSWORD bin\AnyCPU\Debug\OpenEHR.mez
 
 # Run M tests against test harness
-MakePQX run src\OpenEHR.query.pq
+MakePQX run OpenEHR.query.pq
 ```
 
 From macOS, trigger a CI build remotely: `gh workflow run ci.yml`.

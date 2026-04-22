@@ -18,6 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  POWERQUERY_SDKTOOLS_VERSION: "2.153.3"
   EHRBASE_VERSION: "2.15.0"
   POSTGRES_VERSION: "16.4-alpine"
   EHRBASE_USER: ehrbase
@@ -33,37 +34,38 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          # TargetFramework in src/OpenEHR.proj is net10.0.
-          dotnet-version: "10.0.x"
-
-      - name: Restore Power Query SDK
+      - name: Install Power Query SDK tools
         shell: pwsh
         run: |
-          # Microsoft.PowerQuery.SdkTools is an MSBuild SDK pinned in /global.json.
-          # Restore it explicitly so Sdk.props exists in the NuGet cache before build.
-          dotnet restore src/OpenEHR.proj
-          $version = (Get-Content global.json | ConvertFrom-Json).'msbuild-sdks'.'Microsoft.PowerQuery.SdkTools'
-          $sdkProps = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.powerquery.sdktools\$version\Sdk\Sdk.props"
-          if (-not (Test-Path $sdkProps)) {
-            throw "Sdk.props not found at $sdkProps after restore."
+          $version = "${{ env.POWERQUERY_SDKTOOLS_VERSION }}"
+          $packageZip = Join-Path $env:RUNNER_TEMP "Microsoft.PowerQuery.SdkTools.$version.zip"
+          $packageDir = Join-Path $env:RUNNER_TEMP "Microsoft.PowerQuery.SdkTools.$version"
+          Invoke-WebRequest "https://www.nuget.org/api/v2/package/Microsoft.PowerQuery.SdkTools/$version" -OutFile $packageZip
+          if (Test-Path $packageDir) {
+            Remove-Item -Recurse -Force $packageDir
           }
-          Write-Output "Restored $sdkProps"
+          Expand-Archive -Path $packageZip -DestinationPath $packageDir -Force
+          $tools = Join-Path $packageDir "tools"
+          $makePQX = Join-Path $tools "MakePQX.exe"
+          if (-not (Test-Path $makePQX)) {
+            throw "MakePQX.exe not found at $makePQX"
+          }
+          "$tools" | Out-File -FilePath $env:GITHUB_PATH -Append
+          Write-Output "MakePQX available at $makePQX"
 
       - name: Build .mez
         shell: pwsh
+        working-directory: src
         run: |
-          dotnet build src/OpenEHR.proj --configuration Release --no-restore
-          Get-ChildItem -Recurse -Path src\bin -Filter *.mez | ForEach-Object { Write-Host "Built: $($_.FullName)" }
+          MakePQX compile . -t OpenEHR
+          Get-ChildItem -Recurse -Path bin -Filter *.mez | ForEach-Object { Write-Host "Built: $($_.FullName)" }
 
       - name: Locate .mez
         id: locate
         shell: pwsh
         run: |
           $mez = Get-ChildItem -Recurse -Path src\bin -Filter OpenEHR.mez | Select-Object -First 1
-          if (-not $mez) { throw "OpenEHR.mez not found under src\bin." }
+          if (-not $mez) { throw "OpenEHR.mez not found under src\\bin." }
           "mez=$($mez.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Upload artifact
