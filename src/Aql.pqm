@@ -91,6 +91,18 @@ let
                         encoded = Binary.ToText(Text.ToBinary(pair, TextEncoding.Utf8), BinaryEncoding.Base64)
                     in
                         [#"Authorization" = "Basic " & encoded]
+                else if kind = "OAuth" then
+                    let
+                        token = Record.FieldOrDefault(cred, "access_token", null)
+                    in
+                        if token = null then
+                            error Error.Record(
+                                "OpenEHR.AuthError",
+                                "No OAuth access token in the current credential. Sign in again via File > Options > Data source settings.",
+                                [Credential = cred]
+                            )
+                        else
+                            [#"Authorization" = "Bearer " & token]
                 else if kind = "Anonymous" then
                     []
                 else

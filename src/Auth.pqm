@@ -1,0 +1,187 @@
+// Auth.pqm — OAuth 2.0 authorization-code flow with PKCE (RFC 7636).
+//
+// Factory signature:
+//   (config as record) as record
+//
+//   config = [
+//     ClientId     = text,                 // registered public client / "native" app id
+//     AuthorizeUri = text,                 // /authorize endpoint
+//     TokenUri     = text,                 // /token endpoint
+//     RedirectUri  = text,                 // must EXACTLY match the value registered with the IDP
+//     Scopes       = { text, ... },        // space-joined into the scope parameter
+//     LogoutUri    = nullable text         // optional /logout endpoint
+//   ]
+//
+// Exports: StartLogin, FinishLogin, Refresh, Logout, BearerHeader.
+//
+// Gotchas enforced here:
+//   - PKCE S256: code_verifier is 64 URL-safe chars; code_challenge = base64url(sha256(verifier)).
+//   - state is a caller-provided opaque string and must round-trip through the IDP
+//     unchanged (the Power BI service relies on it for refresh-time re-auth).
+//   - Token endpoint responses go through Binary.Buffer so PQ's lazy evaluator
+//     can't double-fetch a single-use authorization code.
+//   - ExcludedFromCacheKey = {"Authorization"} on every Web.Contents call so a
+//     rotating bearer can't poison the shared response cache.
+
+(config as record) as record =>
+let
+    Base64UrlEncode = (b as binary) as text =>
+        let
+            base64 = Binary.ToText(b, BinaryEncoding.Base64),
+            urlSafe = Text.Replace(Text.Replace(base64, "+", "-"), "/", "_"),
+            stripped = Text.TrimEnd(urlSafe, "=")
+        in
+            stripped,
+
+    // Concat GUIDs → strip separators → slice. Power Query has no CSPRNG,
+    // but Text.NewGuid is UUIDv4 (122 bits each), four of them well exceeds the
+    // RFC-7636 minimum verifier entropy of 256 bits.
+    NewVerifier = () as text =>
+        Text.Start(
+            Text.Lower(
+                Text.Replace(
+                    Text.Replace(
+                        Text.NewGuid() & Text.NewGuid() & Text.NewGuid() & Text.NewGuid(),
+                        "-", ""),
+                    "{", "")
+            ),
+            64),
+
+    Challenge = (verifier as text) as text =>
+        Base64UrlEncode(
+            Crypto.CreateHash(
+                CryptoAlgorithm.SHA256,
+                Text.ToBinary(verifier, TextEncoding.Ascii)
+            )
+        ),
+
+    ScopeString = Text.Combine(config[Scopes], " "),
+
+    StartLogin = (resourceUrl as text, state as text, display as text) as record =>
+        let
+            verifier  = NewVerifier(),
+            challenge = Challenge(verifier),
+            qs = Uri.BuildQueryString([
+                client_id             = config[ClientId],
+                response_type         = "code",
+                scope                 = ScopeString,
+                redirect_uri          = config[RedirectUri],
+                state                 = state,
+                code_challenge        = challenge,
+                code_challenge_method = "S256",
+                response_mode         = "query"
+            ]),
+            loginUri = config[AuthorizeUri] & "?" & qs
+        in
+            [
+                LoginUri     = loginUri,
+                CallbackUri  = config[RedirectUri],
+                WindowHeight = 1024,
+                WindowWidth  = 720,
+                // The verifier must reach FinishLogin; the state must reach the IDP.
+                Context      = verifier
+            ],
+
+    FinishLogin = (context as any, callbackUri as text, state as text) as record =>
+        let
+            parts    = Uri.Parts(callbackUri),
+            query    = if Record.HasFields(parts, {"Query"}) then parts[Query] else [],
+            errCode  = Record.FieldOrDefault(query, "error", null),
+            errDesc  = Record.FieldOrDefault(query, "error_description", null),
+            code     = Record.FieldOrDefault(query, "code", null),
+            verifier = context,
+            tokens   =
+                if errCode <> null then
+                    error Error.Record(
+                        "OpenEHR.AuthError",
+                        if errDesc <> null then errDesc else ("IDP returned " & errCode),
+                        [IdpError = errCode, IdpErrorDescription = errDesc]
+                    )
+                else if code = null then
+                    error Error.Record(
+                        "OpenEHR.AuthError",
+                        "Authorization code missing from callback URI.",
+                        [Callback = callbackUri]
+                    )
+                else
+                    TokenRequest([
+                        grant_type    = "authorization_code",
+                        code          = code,
+                        redirect_uri  = config[RedirectUri],
+                        client_id     = config[ClientId],
+                        code_verifier = verifier
+                    ])
+        in
+            tokens,
+
+    Refresh = (resourceUrl as text, refreshToken as text) as record =>
+        TokenRequest([
+            grant_type    = "refresh_token",
+            refresh_token = refreshToken,
+            client_id     = config[ClientId],
+            scope         = ScopeString
+        ]),
+
+    Logout = (token as text) as text =>
+        if Record.HasFields(config, {"LogoutUri"}) and config[LogoutUri] <> null
+        then config[LogoutUri]
+        else "",
+
+    TokenRequest = (form as record) as record =>
+        let
+            body     = Text.ToBinary(Uri.BuildQueryString(form), TextEncoding.Ascii),
+            response = Web.Contents(
+                config[TokenUri],
+                [
+                    Content              = body,
+                    Headers              = [
+                        #"Content-Type" = "application/x-www-form-urlencoded",
+                        #"Accept"       = "application/json"
+                    ],
+                    ManualStatusHandling = {400, 401, 403, 500},
+                    ExcludedFromCacheKey = {"Authorization"}
+                ]
+            ),
+            buffered = Binary.Buffer(response),
+            meta     = Value.Metadata(response),
+            status   = meta[Response.Status],
+            parsed   = try Json.Document(buffered) otherwise [error = "invalid_response"]
+        in
+            if status >= 200 and status < 300 then
+                parsed
+            else
+                error Error.Record(
+                    "OpenEHR.AuthError",
+                    Record.FieldOrDefault(
+                        parsed,
+                        "error_description",
+                        Record.FieldOrDefault(parsed, "error", "Token endpoint returned HTTP " & Number.ToText(status))
+                    ),
+                    [Status = status, Body = parsed]
+                ),
+
+    // Bearer header for AQL requests. Called on every HTTP call in Aql.pqm —
+    // reads the current credential regardless of whether it was sourced via
+    // interactive OAuth or a refresh-token grant by the gateway.
+    BearerHeader = () as record =>
+        let
+            cred  = Extension.CurrentCredential(),
+            token = Record.FieldOrDefault(cred, "access_token", null)
+        in
+            if token = null then
+                error Error.Record(
+                    "OpenEHR.AuthError",
+                    "No OAuth access token in the current credential. Sign in again via File > Options > Data source settings.",
+                    [Credential = cred]
+                )
+            else
+                [#"Authorization" = "Bearer " & token]
+
+in
+    [
+        StartLogin   = StartLogin,
+        FinishLogin  = FinishLogin,
+        Refresh      = Refresh,
+        Logout       = Logout,
+        BearerHeader = BearerHeader
+    ]

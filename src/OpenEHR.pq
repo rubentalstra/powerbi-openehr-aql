@@ -30,6 +30,34 @@ Aql        = Extension.LoadFunction("Aql.pqm");
 Schema     = Extension.LoadFunction("Schema.pqm");
 Paging     = Extension.LoadFunction("Paging.pqm")(Aql);
 Navigation = Extension.LoadFunction("Navigation.pqm")(Aql, Paging, Schema);
+Auth       = Extension.LoadFunction("Auth.pqm")(OpenEHR.OAuthConfig);
+
+// ---------------------------------------------------------------------------
+// OAuth 2.0 configuration
+//
+// Defaults target Microsoft Entra ID v2 (multi-tenant / `common`) with a
+// public-client app that uses the PKCE flow. To point at Keycloak/Auth0/Okta
+// replace AuthorizeUri / TokenUri / LogoutUri with the IDP's endpoints and
+// set ClientId to your registered public-client ID.
+//
+// For forks / distribution builds: ClientId MUST be replaced before you sign
+// a .pqx you intend to share — the default GUID here is a placeholder and will
+// NOT authenticate against any tenant.
+// ---------------------------------------------------------------------------
+OpenEHR.OAuthConfig = [
+    ClientId     = "00000000-0000-0000-0000-000000000000",
+    AuthorizeUri = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+    TokenUri     = "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    LogoutUri    = "https://login.microsoftonline.com/common/oauth2/v2.0/logout",
+    // Must EXACTLY match the redirect URI registered on the IDP app. For a
+    // Power BI custom connector the canonical value is the one below.
+    RedirectUri  = "https://oauth.powerbi.com/views/oauthredirect.html",
+    // `offline_access` is required for refresh-token issuance on Entra.
+    // Keycloak: typically {"openid", "profile", "offline_access"} or a realm-specific scope.
+    // API-protected scopes: add `api://<app-id-uri>/.default` for Entra, or the
+    // audience scope your CDR expects.
+    Scopes       = { "openid", "profile", "offline_access" }
+];
 
 // ---------------------------------------------------------------------------
 // Public function: OpenEHR.Aql
@@ -151,6 +179,13 @@ OpenEHR = [
             { "OpenEHR.Contents", url },
 
     Authentication = [
+        OAuth = [
+            StartLogin  = Auth[StartLogin],
+            FinishLogin = Auth[FinishLogin],
+            Refresh     = Auth[Refresh],
+            Logout      = Auth[Logout],
+            Label       = Extension.LoadString("OAuthLabel")
+        ],
         UsernamePassword = [
             UsernameLabel = Extension.LoadString("UsernameLabel"),
             PasswordLabel = Extension.LoadString("PasswordLabel"),

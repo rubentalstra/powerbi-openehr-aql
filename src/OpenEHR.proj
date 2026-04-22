@@ -25,6 +25,7 @@
     <Content Include="OpenEHR40.png" />
     <Content Include="OpenEHR48.png" />
     <Content Include="Aql.pqm" />
+    <Content Include="Auth.pqm" />
     <Content Include="Paging.pqm" />
     <Content Include="Schema.pqm" />
     <Content Include="Navigation.pqm" />

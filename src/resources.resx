@@ -17,6 +17,9 @@
   <data name="BasicAuthLabel">
     <value>Username and password</value>
   </data>
+  <data name="OAuthLabel">
+    <value>Organizational account (OAuth)</value>
+  </data>
   <data name="UsernameLabel">
     <value>CDR username</value>
   </data>
@@ -28,6 +31,9 @@
   </data>
   <data name="OpenEHR.AuthError">
     <value>Authentication failed. Verify credentials in Power BI Desktop: File &gt; Options &gt; Data source settings.</value>
+  </data>
+  <data name="OpenEHR.ConflictError">
+    <value>The CDR rejected the operation due to a conflict (HTTP 409).</value>
   </data>
   <data name="OpenEHR.TimeoutError">
     <value>The CDR took longer than the configured Timeout to respond.</value>
