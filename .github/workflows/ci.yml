@@ -69,10 +69,11 @@ jobs:
   integration:
     name: Canonical AQL smoke tests
     runs-on: ubuntu-latest
-    # Using docker compose (not services:) so the init-SQL volume mount works
-    # and ehrbase can depends_on: service_healthy on postgres. GH service
-    # containers start before actions/checkout runs, so they can't mount
-    # repo files.
+    # Using docker compose (not services:) so ehrbase can depends_on:
+    # service_healthy on postgres and the Postgres image's own init scripts
+    # (extensions + locale) are preserved. GH service containers start
+    # before actions/checkout runs, so ordering and volume-based init would
+    # not work there.
     steps:
       - uses: actions/checkout@v6
 

@@ -40,7 +40,13 @@ Get-ChildItem -Path (Join-Path $SeedDir 'templates') -Filter '*.opt' -File | For
 }
 Write-Output "Templates processed: $templateCount"
 
-function New-EHR([string]$subjectId, [string]$subjectNs) {
+function New-EHR {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [string]$subjectId,
+        [string]$subjectNs
+    )
+    if (-not $PSCmdlet.ShouldProcess("EHR for subject $subjectId", "Create")) { return }
     $payload = @{
         '_type' = 'EHR_STATUS'
         name = @{ value = 'EHR Status' }

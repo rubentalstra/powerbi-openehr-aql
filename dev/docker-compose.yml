@@ -13,7 +13,10 @@ name: openehr-dev
 
 services:
   ehrbase-postgres:
-    image: postgres:16.4-alpine
+    # Official EHRbase-provided Postgres image. Stock postgres:16 is missing
+    # the third-party extensions (temporal_tables, jsquery) and the en_US
+    # collation that EHRbase's Flyway V3__locatable.sql requires.
+    image: ehrbase/ehrbase-v2-postgres:16.2
     container_name: ehrbase-postgres
     restart: unless-stopped
     environment:
@@ -27,7 +30,12 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - ehrbase-postgres-data:/var/lib/postgresql/data
-      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+      # NOTE: ehrbase/ehrbase-v2-postgres bundles its own init scripts in
+      # /docker-entrypoint-initdb.d (creates the ehrbase DB, roles,
+      # extensions). Do NOT mount ./postgres-init here — it would shadow the
+      # image's scripts and break the Flyway migration. The file in
+      # dev/postgres-init/ is kept as reference for anyone running on
+      # plain postgres:16 who needs to replicate the setup manually.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s

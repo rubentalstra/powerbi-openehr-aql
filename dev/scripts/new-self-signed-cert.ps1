@@ -7,7 +7,7 @@
 # Requires Windows OR PowerShell 7+ on macOS with `pwsh`.
 param(
     [Parameter(Mandatory = $true)]
-    [string]$Password,
+    [SecureString]$Password,
 
     [string]$Subject = "CN=powerbi-openehr-aql Dev Cert",
     [string]$OutputDir = "."
@@ -29,7 +29,7 @@ $cert = New-SelfSignedCertificate `
     -CertStoreLocation "Cert:\CurrentUser\My" `
     -NotAfter (Get-Date).AddYears(3)
 
-$securePwd = ConvertTo-SecureString -String $Password -Force -AsPlainText
+$securePwd = $Password
 
 $pfxPath = Join-Path $OutputDir 'dev-cert.pfx'
 $cerPath = Join-Path $OutputDir 'dev-cert.cer'
