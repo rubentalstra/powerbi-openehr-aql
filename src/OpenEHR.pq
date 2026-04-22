@@ -73,7 +73,8 @@ OpenEHR.AqlImpl = (
         expand      = Record.FieldOrDefault(opts, "ExpandRmObjects", true),
         timeout     = Record.FieldOrDefault(opts, "Timeout",         null),
         queryParams = Record.FieldOrDefault(opts, "QueryParameters", null),
-        rs          = Paging[GetAllRows](cdrBaseUrl, aql, queryParams, pageSize, timeout)
+        policy      = OpenEHR.BuildPolicy(opts),
+        rs          = Paging[GetAllRows](cdrBaseUrl, aql, queryParams, pageSize, timeout, policy)
     in
         Schema[ResultSetToTable](rs, expand);
 
@@ -94,16 +95,28 @@ OpenEHR.AqlType = type function (
         optional PageSize        = nullable number,
         optional ExpandRmObjects = nullable logical,
         optional Timeout         = nullable duration,
-        optional QueryParameters = nullable record
+        optional QueryParameters = nullable record,
+        optional PhiSafe         = nullable logical,
+        optional RetryPolicy     = nullable record,
+        optional AuditContext    = nullable text
     ] meta [
         Documentation.FieldCaption     = "Options",
-        Documentation.FieldDescription = "PageSize (rows per round-trip, default 1000). ExpandRmObjects (flatten DV_QUANTITY/DV_CODED_TEXT/... into scalar columns, default true). Timeout (per-request, default 2m). QueryParameters (record substituted into :name placeholders)."
+        Documentation.FieldDescription = "PageSize (rows per round-trip, default 1000). ExpandRmObjects (flatten DV_QUANTITY/DV_CODED_TEXT/... into scalar columns, default true). Timeout (per-request, default 2m). QueryParameters (record substituted into :name placeholders). PhiSafe (refuse Basic-over-http, redact error bodies). RetryPolicy ([MaxAttempts, InitialDelayMs, Jitter]). AuditContext (opaque correlation id echoed as X-Audit-Context header)."
     ])
 ) as table meta [
     Documentation.Name        = "OpenEHR.Aql",
     Documentation.LongDescription =
         "Executes an openEHR AQL query against a Clinical Data Repository and returns the result as a Power BI table. Pagination and RM-object flattening are handled automatically."
 ];
+
+// Build the transport-level policy record out of user-supplied option fields.
+// Used by both OpenEHR.Aql and OpenEHR.StoredQuery.
+OpenEHR.BuildPolicy = (opts as record) as record =>
+    [
+        PhiSafe      = Record.FieldOrDefault(opts, "PhiSafe",      false),
+        RetryPolicy  = Record.FieldOrDefault(opts, "RetryPolicy",  null),
+        AuditContext = Record.FieldOrDefault(opts, "AuditContext", null)
+    ];
 
 [DataSource.Kind="OpenEHR"]
 shared OpenEHR.Aql = Value.ReplaceType(OpenEHR.AqlImpl, OpenEHR.AqlType);
@@ -120,7 +133,8 @@ OpenEHR.StoredQueryImpl = (
     let
         opts   = if options = null then [] else options,
         expand = Record.FieldOrDefault(opts, "ExpandRmObjects", true),
-        rs     = Aql[ExecuteStored](cdrBaseUrl, qualifiedName, version)
+        policy = OpenEHR.BuildPolicy(opts),
+        rs     = Aql[ExecuteStored](cdrBaseUrl, qualifiedName, version, policy)
     in
         Schema[ResultSetToTable](rs, expand);
 
@@ -136,7 +150,10 @@ OpenEHR.StoredQueryType = type function (
         Documentation.FieldCaption = "Version (optional)"
     ]),
     optional options as (type [
-        optional ExpandRmObjects = nullable logical
+        optional ExpandRmObjects = nullable logical,
+        optional PhiSafe         = nullable logical,
+        optional RetryPolicy     = nullable record,
+        optional AuditContext    = nullable text
     ])
 ) as table meta [
     Documentation.Name = "OpenEHR.StoredQuery",
@@ -146,6 +163,40 @@ OpenEHR.StoredQueryType = type function (
 
 [DataSource.Kind="OpenEHR"]
 shared OpenEHR.StoredQuery = Value.ReplaceType(OpenEHR.StoredQueryImpl, OpenEHR.StoredQueryType);
+
+// ---------------------------------------------------------------------------
+// Public function: OpenEHR.Template — fetch a single operational template (OPT).
+// Returns the JSON representation as a record; useful for tooling, template-aware
+// flattening pipelines, or diagnostic visualisations.
+// ---------------------------------------------------------------------------
+OpenEHR.TemplateImpl = (cdrBaseUrl as text, templateId as text, optional options as nullable record) as any =>
+    let
+        opts   = if options = null then [] else options,
+        policy = OpenEHR.BuildPolicy(opts)
+    in
+        Aql[GetTemplate](cdrBaseUrl, templateId, policy);
+
+OpenEHR.TemplateType = type function (
+    cdrBaseUrl as (type text meta [
+        Documentation.FieldCaption = "openEHR REST base URL"
+    ]),
+    templateId as (type text meta [
+        Documentation.FieldCaption = "Template id",
+        Documentation.SampleValues = { "openEHR-EHR-OBSERVATION.blood_pressure.v2" }
+    ]),
+    optional options as (type [
+        optional PhiSafe      = nullable logical,
+        optional RetryPolicy  = nullable record,
+        optional AuditContext = nullable text
+    ])
+) as any meta [
+    Documentation.Name = "OpenEHR.Template",
+    Documentation.LongDescription =
+        "Fetches the JSON representation of an installed operational template (OPT) from the CDR."
+];
+
+[DataSource.Kind="OpenEHR"]
+shared OpenEHR.Template = Value.ReplaceType(OpenEHR.TemplateImpl, OpenEHR.TemplateType);
 
 // ---------------------------------------------------------------------------
 // Public function: OpenEHR.Contents  — navigation entry point

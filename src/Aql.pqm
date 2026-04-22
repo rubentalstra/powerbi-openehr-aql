@@ -1,53 +1,162 @@
 // Aql.pqm — HTTP transport for openEHR AQL + stored queries.
 //
 // Public members (returned as a record):
-//   Execute(cdrBaseUrl, aql, queryParameters?, offset?, fetchCount?, timeout?) -> record
-//   ExecuteStored(cdrBaseUrl, qualifiedName, version?)                         -> record
-//   AuthHeader()                                                               -> record
-//   RaiseError(status, responseBody, contextText)                              -> error
+//   Execute(cdrBaseUrl, aql, queryParameters?, offset?, fetchCount?, timeout?, policy?) -> record
+//   ExecuteStored(cdrBaseUrl, qualifiedName, version?, policy?)                         -> record
+//   ListStoredQueries(cdrBaseUrl)                                                       -> list
+//   GetTemplate(cdrBaseUrl, templateId)                                                 -> any
+//   AuthHeader(policy?)                                                                 -> record
+//   RaiseError(status, responseBody, contextText, policy?)                              -> error
 //
 // Gotchas enforced here:
 //   - Web.Contents base URL is the un-mutated `cdrBaseUrl` argument (static from PQ's view).
 //     Variability goes into RelativePath / Query / Headers / Content.
-//   - ExcludedFromCacheKey = {"Authorization"} — rotating tokens must not poison the cache.
-//   - ManualStatusHandling covers the codes we map into OpenEHR.* error categories.
+//   - ExcludedFromCacheKey = {"Authorization", "X-Audit-Context"} — rotating tokens +
+//     per-request audit stamps must not poison the response cache.
+//   - ManualStatusHandling covers the codes we map into OpenEHR.* error categories,
+//     plus 429 / 502 / 503 / 504 so RetryTransient can see and retry them.
 //   - AQL body uses `query_parameters` (underscore) per the current spec.
+//
+// `policy` is an optional record:
+//   [ PhiSafe = logical, RetryPolicy = record, AuditContext = text ]
 
 let
+    // Max transient-error retries before giving up. Kept small — Power BI's own
+    // refresh layer retries datasets too, so we don't want to stack huge waits.
+    MaxRetryDefault   = 3,
+    RetryDelayMsDefault = 400,   // first backoff; doubled each attempt.
+
+    NormalizePolicy = (policy as nullable record) as record =>
+        let
+            p       = if policy = null then [] else policy,
+            phi     = Record.FieldOrDefault(p, "PhiSafe", false),
+            retry   = Record.FieldOrDefault(p, "RetryPolicy", null),
+            audit   = Record.FieldOrDefault(p, "AuditContext", null),
+            maxRetries = if retry <> null then Record.FieldOrDefault(retry, "MaxAttempts", MaxRetryDefault) else MaxRetryDefault,
+            delayMs    = if retry <> null then Record.FieldOrDefault(retry, "InitialDelayMs", RetryDelayMsDefault) else RetryDelayMsDefault,
+            jitter     = if retry <> null then Record.FieldOrDefault(retry, "Jitter", true) else true
+        in
+            [
+                PhiSafe        = phi,
+                AuditContext   = audit,
+                MaxAttempts    = maxRetries,
+                InitialDelayMs = delayMs,
+                Jitter         = jitter
+            ],
+
+    IsTransient = (status as number) as logical =>
+        status = 408 or status = 425 or status = 429 or status = 500 or status = 502 or status = 503 or status = 504,
+
+    SleepMs = (ms as number) as null =>
+        // Power Query has no Thread.Sleep; Function.InvokeAfter(() => null, #duration(..)) is
+        // the idiomatic way to delay. `#duration(0,0,0,seconds)` supports fractional seconds.
+        Function.InvokeAfter(() => null, #duration(0, 0, 0, ms / 1000)),
+
+    // Jitter keeps thundering-herd behaviour off when many gateways all retry at once.
+    NextDelay = (attempt as number, initialMs as number, jitter as logical) as number =>
+        let
+            base = initialMs * Number.Power(2, attempt - 1),
+            jit  = if jitter then 1 - 0.3 + (Number.Mod(Number.From(Text.NewGuid()), 60) / 100) else 1
+        in
+            base * jit,
+
+    AttemptRequest = (
+        url as text,
+        opts as record,
+        policy as record
+    ) as record =>
+        // Returns [ status, body, isTransient ] — never throws. The caller drives retries.
+        let
+            response = Web.Contents(url, opts),
+            buffered = Binary.Buffer(response),
+            meta     = Value.Metadata(response),
+            status   = meta[Response.Status]
+        in
+            [ Status = status, Body = buffered, Transient = IsTransient(status) ],
+
+    // Wrapper: run `fetch` up to policy.MaxAttempts. Non-transient statuses short-circuit.
+    WithRetries = (fetch as function, policy as record) as record =>
+        let
+            max = policy[MaxAttempts],
+            loop = List.Generate(
+                () => [ attempt = 1, result = fetch(), done = false ],
+                each not [done] and [attempt] <= max,
+                each
+                    let
+                        r = [result]
+                    in
+                        if not r[Transient] or [attempt] >= max then
+                            [ attempt = [attempt], result = r, done = true ]
+                        else
+                            let
+                                _ = SleepMs(NextDelay([attempt], policy[InitialDelayMs], policy[Jitter])),
+                                next = fetch()
+                            in
+                                [ attempt = [attempt] + 1, result = next, done = false ],
+                each [result]
+            )
+        in
+            List.Last(loop),
+
+    PhiGuardNonTls = (cdrBaseUrl as text, policy as record, kind as text) as null =>
+        if policy[PhiSafe] and Text.StartsWith(Text.Lower(cdrBaseUrl), "http://") and kind = "UsernamePassword" then
+            error Error.Record(
+                "OpenEHR.AuthError",
+                "PHI-safe mode refuses Basic auth over non-TLS (http://). Switch to https:// or disable PhiSafe.",
+                [CdrBaseUrl = cdrBaseUrl, AuthenticationKind = kind]
+            )
+        else null,
+
+    AuditContextHeader = (policy as record) as record =>
+        if policy[AuditContext] <> null then
+            [#"X-Audit-Context" = policy[AuditContext]]
+        else
+            [],
+
+    BaseHeaders = (accept as text, policy as record) as record =>
+        [#"Accept" = accept] & AuthHeader(policy) & AuditContextHeader(policy),
+
     Execute = (
         cdrBaseUrl as text,
         aql as text,
         optional queryParameters as nullable record,
         optional offset as nullable number,
         optional fetchCount as nullable number,
-        optional timeout as nullable duration
+        optional timeout as nullable duration,
+        optional policyArg as nullable record
     ) as record =>
         let
+            policy = NormalizePolicy(policyArg),
+            cred   = Extension.CurrentCredential(),
+            _phi   = PhiGuardNonTls(cdrBaseUrl, policy, cred[AuthenticationKind]),
+
             body = [q = aql]
                 & (if queryParameters <> null then [query_parameters = queryParameters] else [])
                 & (if offset         <> null then [offset            = offset]          else [])
                 & (if fetchCount     <> null then [fetch             = fetchCount]      else []),
             bodyJson = Json.FromValue(body),
-            headers  = [#"Content-Type" = "application/json", #"Accept" = "application/json"] & AuthHeader(),
-            response = Web.Contents(
-                cdrBaseUrl,
-                [
-                    RelativePath          = "query/aql",
-                    Headers               = headers,
-                    Content               = bodyJson,
-                    Timeout               = if timeout <> null then timeout else #duration(0, 0, 2, 0),
-                    ManualStatusHandling  = {400, 401, 403, 404, 408, 409, 413, 429, 500, 502, 503, 504},
-                    ExcludedFromCacheKey  = {"Authorization"}
-                ]
-            ),
-            buffered = Binary.Buffer(response),
-            meta     = Value.Metadata(response),
-            status   = meta[Response.Status],
-            result   =
+            headers  = [#"Content-Type" = "application/json"] & BaseHeaders("application/json", policy),
+
+            attempt = () =>
+                AttemptRequest(
+                    cdrBaseUrl,
+                    [
+                        RelativePath          = "query/aql",
+                        Headers               = headers,
+                        Content               = bodyJson,
+                        Timeout               = if timeout <> null then timeout else #duration(0, 0, 2, 0),
+                        ManualStatusHandling  = {400, 401, 403, 404, 408, 409, 413, 425, 429, 500, 502, 503, 504},
+                        ExcludedFromCacheKey  = {"Authorization", "X-Audit-Context"}
+                    ],
+                    policy
+                ),
+            final = WithRetries(attempt, policy),
+            status = final[Status],
+            result =
                 if status >= 200 and status < 300 then
-                    Json.Document(buffered)
+                    Json.Document(final[Body])
                 else
-                    RaiseError(status, buffered, aql)
+                    RaiseError(status, final[Body], aql, policy)
         in
             result,
 
@@ -56,32 +165,85 @@ let
     ExecuteStored = (
         cdrBaseUrl as text,
         qualifiedName as text,
-        optional version as nullable text
+        optional version as nullable text,
+        optional policyArg as nullable record
     ) as record =>
         let
+            policy = NormalizePolicy(policyArg),
+            cred   = Extension.CurrentCredential(),
+            _phi   = PhiGuardNonTls(cdrBaseUrl, policy, cred[AuthenticationKind]),
+
             path = if version <> null and version <> ""
                 then "query/" & qualifiedName & "/" & version
                 else "query/" & qualifiedName,
-            response = Web.Contents(
-                cdrBaseUrl,
-                [
-                    RelativePath         = path,
-                    Headers              = [#"Accept" = "application/json"] & AuthHeader(),
-                    ManualStatusHandling = {400, 401, 403, 404, 408, 500},
-                    ExcludedFromCacheKey = {"Authorization"}
-                ]
-            ),
-            buffered = Binary.Buffer(response),
-            meta     = Value.Metadata(response),
-            status   = meta[Response.Status]
+
+            attempt = () =>
+                AttemptRequest(
+                    cdrBaseUrl,
+                    [
+                        RelativePath         = path,
+                        Headers              = BaseHeaders("application/json", policy),
+                        ManualStatusHandling = {400, 401, 403, 404, 408, 429, 500, 502, 503, 504},
+                        ExcludedFromCacheKey = {"Authorization", "X-Audit-Context"}
+                    ],
+                    policy
+                ),
+            final = WithRetries(attempt, policy),
+            status = final[Status]
         in
             if status >= 200 and status < 300 then
-                Json.Document(buffered)
+                Json.Document(final[Body])
             else
-                RaiseError(status, buffered, qualifiedName),
+                RaiseError(status, final[Body], qualifiedName, policy),
 
-    AuthHeader = () as record =>
+    ListStoredQueries = (cdrBaseUrl as text, optional policyArg as nullable record) as list =>
         let
+            policy = NormalizePolicy(policyArg),
+            attempt = () =>
+                AttemptRequest(
+                    cdrBaseUrl,
+                    [
+                        RelativePath         = "definition/query",
+                        Headers              = BaseHeaders("application/json", policy),
+                        ManualStatusHandling = {401, 403, 404, 429, 500, 502, 503, 504},
+                        ExcludedFromCacheKey = {"Authorization", "X-Audit-Context"}
+                    ],
+                    policy
+                ),
+            final  = WithRetries(attempt, policy),
+            status = final[Status],
+            parsed = if status >= 200 and status < 300
+                then Json.Document(final[Body])
+                else RaiseError(status, final[Body], "definition/query", policy),
+            items  = if parsed is list then parsed else Record.FieldOrDefault(parsed, "items", {})
+        in
+            items,
+
+    GetTemplate = (cdrBaseUrl as text, templateId as text, optional policyArg as nullable record) as any =>
+        let
+            policy = NormalizePolicy(policyArg),
+            attempt = () =>
+                AttemptRequest(
+                    cdrBaseUrl,
+                    [
+                        RelativePath         = "definition/template/adl1.4/" & templateId,
+                        Headers              = BaseHeaders("application/json", policy),
+                        ManualStatusHandling = {401, 403, 404, 429, 500, 502, 503, 504},
+                        ExcludedFromCacheKey = {"Authorization", "X-Audit-Context"}
+                    ],
+                    policy
+                ),
+            final  = WithRetries(attempt, policy),
+            status = final[Status]
+        in
+            if status >= 200 and status < 300 then
+                Json.Document(final[Body])
+            else
+                RaiseError(status, final[Body], "template/" & templateId, policy),
+
+    AuthHeader = (optional policyArg as nullable record) as record =>
+        let
+            policy = NormalizePolicy(policyArg),
             cred = Extension.CurrentCredential(),
             kind = cred[AuthenticationKind],
             header =
@@ -99,7 +261,7 @@ let
                             error Error.Record(
                                 "OpenEHR.AuthError",
                                 "No OAuth access token in the current credential. Sign in again via File > Options > Data source settings.",
-                                [Credential = cred]
+                                [AuthenticationKind = kind]
                             )
                         else
                             [#"Authorization" = "Bearer " & token]
@@ -114,11 +276,11 @@ let
         in
             header,
 
-    RaiseError = (status as number, responseBody as binary, contextText as text) as any =>
+    RaiseError = (status as number, responseBody as binary, contextText as text, optional policyArg as nullable record) as any =>
         let
+            policy = NormalizePolicy(policyArg),
             asText = try Text.FromBinary(responseBody) otherwise "",
             asJson = try Json.Document(responseBody) otherwise null,
-            // EHRbase puts a human message under either `message` or `error`; fall back to body text.
             message =
                 if asJson <> null and asJson is record and Record.HasFields(asJson, {"message"}) then
                     asJson[message]
@@ -133,17 +295,37 @@ let
                 else if status = 408 then "OpenEHR.TimeoutError"
                 else if status = 409 then "OpenEHR.ConflictError"
                 else "OpenEHR.HttpError",
-            details = [
-                Status  = status,
-                Body    = if asJson <> null then asJson else asText,
-                Context = contextText
-            ]
+
+            // PHI-safe mode: never echo a response body back in the error record.
+            bodySummary =
+                if policy[PhiSafe] then
+                    [ ContentBytes = Binary.Length(responseBody), Redacted = true ]
+                else
+                    [ Body = if asJson <> null then asJson else asText ],
+
+            contextSummary = if policy[PhiSafe] then "<redacted>" else contextText,
+
+            details = Record.Combine({
+                [ Status = status, Context = contextSummary ],
+                bodySummary
+            }),
+            genericMsg =
+                if category = "OpenEHR.AqlError"     then "The CDR rejected the AQL query."
+                else if category = "OpenEHR.AuthError" then "Authentication failed."
+                else if category = "OpenEHR.NotFoundError" then "Resource not found."
+                else if category = "OpenEHR.TimeoutError"  then "The CDR took longer than the configured Timeout."
+                else if category = "OpenEHR.ConflictError" then "The CDR rejected the operation due to a conflict."
+                else "The CDR returned an unexpected HTTP error.",
+            finalMessage = if policy[PhiSafe] then genericMsg else message
         in
-            error Error.Record(category, message, details)
+            error Error.Record(category, finalMessage, details)
 in
     [
-        Execute       = Execute,
-        ExecuteStored = ExecuteStored,
-        AuthHeader    = AuthHeader,
-        RaiseError    = RaiseError
+        Execute           = Execute,
+        ExecuteStored     = ExecuteStored,
+        ListStoredQueries = ListStoredQueries,
+        GetTemplate       = GetTemplate,
+        AuthHeader        = AuthHeader,
+        RaiseError        = RaiseError,
+        NormalizePolicy   = NormalizePolicy
     ]

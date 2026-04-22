@@ -48,17 +48,7 @@
 
         BuildStoredQueries = (cdrBaseUrl as text) as table =>
             let
-                response = Web.Contents(
-                    cdrBaseUrl,
-                    [
-                        RelativePath         = "definition/query",
-                        Headers              = [#"Accept" = "application/json"] & aql[AuthHeader](),
-                        ManualStatusHandling = {401, 403, 404, 500},
-                        ExcludedFromCacheKey = {"Authorization"}
-                    ]
-                ),
-                parsed = Json.Document(response),
-                items  = if parsed is list then parsed else Record.FieldOrDefault(parsed, "items", {}),
+                items = aql[ListStoredQueries](cdrBaseUrl, null),
                 // Build a base table carrying qname + version so the Data column
                 // can lazily materialise each row via Table.AddColumn(each ...).
                 baseRows = List.Transform(items, (q) =>
@@ -89,7 +79,7 @@
                 Table.ToNavigationTable(navCols, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf"),
 
         RunStoredQuery = (cdrBaseUrl as text, qualifiedName as text, optional version as nullable text) as table =>
-            schema[ResultSetToTable](aql[ExecuteStored](cdrBaseUrl, qualifiedName, version), true),
+            schema[ResultSetToTable](aql[ExecuteStored](cdrBaseUrl, qualifiedName, version, null), true),
 
         BuildTemplatesTable = (cdrBaseUrl as text) as table =>
             let
@@ -118,6 +108,7 @@
                     "SELECT e/ehr_id/value AS EhrId, e/ehr_status/subject/external_ref/id/value AS SubjectId FROM EHR e",
                     null,
                     1000,
+                    null,
                     null
                 )
             in

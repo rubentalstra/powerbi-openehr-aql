@@ -10,8 +10,11 @@
 | `ExpandRmObjects`  | `logical`  | `true`                 | If `true`, flatten `DV_QUANTITY`, `DV_CODED_TEXT`, `DV_DATE_TIME`, `DV_IDENTIFIER`, `PARTY_SELF`, … to scalars. |
 | `Timeout`          | `duration` | `#duration(0,0,2,0)`   | Per-request timeout. Applied to every page fetch.                                                               |
 | `QueryParameters`  | `record`   | `null`                 | Values substituted into `:name` placeholders in the AQL (serialised as `query_parameters`).                     |
+| `PhiSafe`          | `logical`  | `false`                | Redact error-body content + refuse Basic auth over `http://`. See [PHI-safe mode](../compliance/phi-safe-mode.md). |
+| `RetryPolicy`      | `record`   | `null`                 | `[MaxAttempts, InitialDelayMs, Jitter]` — controls transient-status backoff.                                    |
+| `AuditContext`     | `text`     | `null`                 | Opaque correlation id. Echoed as `X-Audit-Context` on every request.                                            |
 
-All four fields are individually optional.
+All fields are individually optional.
 
 ## `PageSize`
 
@@ -74,6 +77,52 @@ Use cases:
 
 !!! warning "Underscore, not hyphen"
     Earlier drafts of the openEHR spec used `query-parameters` (hyphen). The connector always emits `query_parameters` (underscore), matching the current spec. Custom CDRs must accept that form.
+
+## `PhiSafe`
+
+When `true`:
+
+- **Basic auth over plaintext `http://` is refused** — the connector raises `OpenEHR.AuthError` before the request leaves the machine. (OAuth bearers are allowed regardless because token exposure on localhost loopback is a different threat model. Move to `https://` for prod.)
+- **Error-body redaction.** `Error.Detail` replaces the server body with `[ContentBytes, Redacted = true]`. The human message becomes a generic category phrase ("The CDR rejected the AQL query.") rather than the vendor-provided message, which may echo PHI.
+- **Context redaction.** `Error.Detail.Context` — the AQL text or stored-query name that triggered the error — becomes `"<redacted>"`.
+
+Errors still **fail the dataset** loudly. The flag narrows what travels with them.
+
+```m
+OpenEHR.Aql(
+    "https://cdr.example.org/rest/openehr/v1",
+    sampleAql,
+    [ PhiSafe = true ]
+)
+```
+
+## `RetryPolicy`
+
+Transient HTTP statuses (408, 425, 429, 500, 502, 503, 504) are retried with exponential backoff and jitter. Defaults are conservative because Power BI's own refresh layer also retries failed datasets.
+
+| Field            | Type      | Default | Meaning                                                                       |
+| ---------------- | --------- | ------- | ----------------------------------------------------------------------------- |
+| `MaxAttempts`    | `number`  | `3`     | Total attempts including the first. `1` disables retries entirely.            |
+| `InitialDelayMs` | `number`  | `400`   | Wait before retry #2. Doubled on each subsequent attempt (exponential).       |
+| `Jitter`         | `logical` | `true`  | ±30% randomisation to prevent thundering-herd when many gateways retry at once. |
+
+```m
+OpenEHR.Aql(cdr, sampleAql,
+    [ RetryPolicy = [ MaxAttempts = 5, InitialDelayMs = 750, Jitter = true ] ]
+)
+```
+
+Non-transient errors (400/401/403/404/409) are **not** retried — they fail immediately.
+
+## `AuditContext`
+
+Any opaque string. Passed on every request as the `X-Audit-Context` HTTP header and included in `ExcludedFromCacheKey`, so rotating the value between refreshes does not poison the response cache. Useful for correlating CDR-side access logs with a dashboard / refresh run.
+
+```m
+OpenEHR.Aql(cdr, sampleAql,
+    [ AuditContext = "dashboard-bp-trend:refresh-" & Text.From(DateTime.LocalNow()) ]
+)
+```
 
 ## Precedence
 

@@ -18,13 +18,14 @@
             aqlText as text,
             optional queryParameters as nullable record,
             optional pageSize as nullable number,
-            optional timeout as nullable duration
+            optional timeout as nullable duration,
+            optional policy as nullable record
         ) as list =>
             let
                 size  = if pageSize <> null then pageSize else 1000,
 
                 fetch = (offset as number) as record =>
-                    aql[Execute](cdrBaseUrl, aqlText, queryParameters, offset, size, timeout),
+                    aql[Execute](cdrBaseUrl, aqlText, queryParameters, offset, size, timeout, policy),
 
                 seed  = fetch(0),
 
@@ -55,10 +56,11 @@
             aqlText as text,
             optional queryParameters as nullable record,
             optional pageSize as nullable number,
-            optional timeout as nullable duration
+            optional timeout as nullable duration,
+            optional policy as nullable record
         ) as record =>
             let
-                allPages = GetAllPages(cdrBaseUrl, aqlText, queryParameters, pageSize, timeout),
+                allPages = GetAllPages(cdrBaseUrl, aqlText, queryParameters, pageSize, timeout, policy),
                 first    = List.First(allPages),
                 rows     = List.Combine(List.Transform(allPages, each _[rows])),
                 columns  = if first <> null then first[columns] else {},

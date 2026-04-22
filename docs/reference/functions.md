@@ -13,6 +13,7 @@ flowchart TD
     N --> EH["EHRs table"]
     A["OpenEHR.Aql(cdrBaseUrl, aql, options?)"] -.-> CDR[("CDR<br/>/query/aql")]
     SQ2["OpenEHR.StoredQuery(cdrBaseUrl, qualifiedName, version?, options?)"] -.-> CDR
+    T["OpenEHR.Template(cdrBaseUrl, templateId, options?)"] -.-> CDR2[("CDR<br/>/definition/template/adl1.4/{id}")]
 ```
 
 ---
@@ -104,7 +105,7 @@ Executes a stored (named) query from the CDR's registry.
 | `cdrBaseUrl`    | `text`   | yes      | Root of the CDR REST API.                                                                   |
 | `qualifiedName` | `text`   | yes      | Fully-qualified query name, e.g. `org.openehr::compositions`.                               |
 | `version`       | `text`   | no       | SemVer. Omit or pass `null` to target the latest version.                                   |
-| `options`       | `record` | no       | Same shape as `OpenEHR.Aql`, minus query-body paging knobs (stored queries page server-side in EHRbase). |
+| `options`       | `record` | no       | Accepts `ExpandRmObjects`, `PhiSafe`, `RetryPolicy`, `AuditContext` — see [Options](options.md). `PageSize` / `Timeout` / `QueryParameters` are ignored (stored queries are page-less GETs in EHRbase). |
 
 ### HTTP
 
@@ -122,6 +123,51 @@ OpenEHR.StoredQuery(
     "org.openehr::compositions",
     "1.0.0"
 )
+```
+
+---
+
+## `OpenEHR.Template(cdrBaseUrl, templateId, options?) as any`
+
+Fetches the raw JSON representation of an installed operational template (OPT). Useful for tooling, template-aware ingestion pipelines, and diagnostic diffing across CDRs.
+
+### Parameters
+
+| Name         | Type     | Required | Description                                                                                              |
+| ------------ | -------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `cdrBaseUrl` | `text`   | yes      | Root of the CDR REST API.                                                                                |
+| `templateId` | `text`   | yes      | ADL 1.4 template id — e.g. `openEHR-EHR-OBSERVATION.blood_pressure.v2`.                                  |
+| `options`    | `record` | no       | `PhiSafe`, `RetryPolicy`, `AuditContext` — see [Options](options.md).                                    |
+
+### HTTP
+
+```
+GET {cdrBaseUrl}/definition/template/adl1.4/{templateId}
+Accept: application/json
+```
+
+### Returns
+
+A record (or list of records) representing the parsed OPT JSON. The exact shape is vendor-specific; EHRbase follows the [Web Template](https://specifications.openehr.org/releases/ITS-REST/latest/definition.html) JSON form.
+
+### Errors
+
+| Reason                  | HTTP | Typical cause                                                   |
+| ----------------------- | ---- | --------------------------------------------------------------- |
+| `OpenEHR.NotFoundError` | 404  | Template id not installed on this CDR.                          |
+| `OpenEHR.AuthError`     | 401/403 | Credentials missing / insufficient template-read scope.      |
+
+### Example
+
+```m
+let
+    opt = OpenEHR.Template(
+        "http://localhost:8080/ehrbase/rest/openehr/v1",
+        "openEHR-EHR-OBSERVATION.blood_pressure.v2"
+    ),
+    asTable = Record.ToTable(opt)
+in
+    asTable
 ```
 
 ---

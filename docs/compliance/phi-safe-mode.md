@@ -1,52 +1,74 @@
 # PHI-safe mode
 
-Engineering flag that reduces the surface area of Personally Identifiable / Protected Health Information in connector-emitted diagnostics. **Planned for Phase 2** — not present in `v0.1.0`. This page describes the intended behaviour so integrators can plan around it.
+Available in **v0.1.0**. Engineering flag that narrows what Personally Identifiable / Protected Health Information can travel with connector diagnostics, and hardens the transport against obvious foot-guns.
+
+Enabled per call via the `PhiSafe = true` option on `OpenEHR.Aql`, `OpenEHR.StoredQuery`, and `OpenEHR.Template`.
 
 ## What it affects
 
 ```mermaid
 flowchart LR
     subgraph Default mode
-      A[AQL body] --> T1[mashup-trace.json]
-      R[Response body] --> E1[Error.Detail.response]
+      A[AQL body] --> EC1["Error.Detail.Context"]
+      R[Response body] --> E1["Error.Detail.Body"]
+      H1[Basic over http://] --> OK1[Accepted]
     end
     subgraph PHI-safe mode
-      A2[AQL body] -->|sha256 prefix| T2[mashup-trace.json]
-      R2[Response body] -->|redacted or truncated| E2[Error.Detail.response]
+      A2[AQL body] -->|"&lt;redacted&gt;"| EC2["Error.Detail.Context"]
+      R2[Response body] -->|"Redacted + ContentBytes"| E2["Error.Detail"]
+      H2[Basic over http://] -->|Blocked| X1["OpenEHR.AuthError"]
+      M["Error.Message"] -->|"Generic by category"| G["'The CDR rejected the AQL query.'"]
     end
 ```
 
-## Guarantees in `v0.1.0` already
+## Behaviours (what the code actually does)
 
-These hold **today**, with or without PHI-safe mode:
+Implemented in `src/Aql.pqm`.
 
-- **No row-level `Diagnostics.Trace`.** Page payloads are never written to trace, whatever the trace level.
-- **No query bodies at `Information`.** AQL text is only traced at `Verbose`, never the default.
-- **No `Authorization` caching.** `ExcludedFromCacheKey = {"Authorization"}` on every `Web.Contents` call.
-- **Credentials never in function args.** The connector reads them via `Extension.CurrentCredential()` at call time — they cannot leak into a saved `.pbix`.
+| Surface                              | Default                              | With `PhiSafe = true`                                                      |
+| ------------------------------------ | ------------------------------------ | -------------------------------------------------------------------------- |
+| Basic auth over `http://`            | Allowed                              | Refused with `OpenEHR.AuthError` before the request leaves the machine.    |
+| `Error.Detail.Body`                  | Parsed JSON or raw body text         | `[ContentBytes = n, Redacted = true]`                                      |
+| `Error.Detail.Context`               | AQL text / stored-query name         | `"<redacted>"`                                                             |
+| `Error.Message`                      | Server-provided message              | Generic per category (e.g. "The CDR rejected the AQL query.")              |
+| `Authorization` in cache key         | Excluded                             | Excluded (same)                                                            |
+| `X-Audit-Context` in cache key       | Excluded                             | Excluded (same)                                                            |
+| Row-level `Diagnostics.Trace`        | Never                                | Never (same — default-safe)                                                |
+| Credentials in function args         | Never accepted                       | Never accepted (same — design invariant)                                   |
 
-## What PHI-safe mode will add (Phase 2)
+The flag narrows what travels with errors. Datasets still fail loudly when the CDR says no; the log just stops carrying content that could identify patients.
 
-| Surface                       | Default                                      | PHI-safe mode                                           |
-| ----------------------------- | -------------------------------------------- | ------------------------------------------------------- |
-| AQL body in trace             | Full text at `Verbose`                       | SHA-256 prefix + character count only                   |
-| Response body in error record | Up to 16 KB verbatim                         | Content-Type + byte count only                          |
-| `QueryParameters` values      | Full values at `Verbose`                     | Keys only; values replaced with `<redacted>`            |
-| Nav-table folder names        | `ehr_id` GUIDs                               | Stable pseudonyms (HMAC of GUID with a per-session salt) |
-| `Error.Message`               | Server-provided message                      | Generic by reason family                                |
+## How to enable
 
-## How to enable (proposed)
-
-A new connector-level option, read once per session:
+Per call:
 
 ```m
-// At the top of src/OpenEHR.pq
-OpenEHR.Options = [
-    PhiSafe = true
-];
+OpenEHR.Aql(
+    "https://cdr.example.org/rest/openehr/v1",
+    "SELECT c/uid/value AS Uid FROM EHR e CONTAINS COMPOSITION c",
+    [ PhiSafe = true ]
+)
 ```
 
-Flipping this flag does **not** silence errors — it narrows what travels with them. Your dataset still fails loudly when the CDR says no; the log just stops carrying content that could identify patients.
+Set it once at the top of your query file as a variable and reuse across steps to keep queries DRY:
+
+```m
+let
+    Opts = [ PhiSafe = true, AuditContext = "prod-dashboard" ],
+    Uids = OpenEHR.Aql(cdr, sampleAql, Opts),
+    Bps  = OpenEHR.StoredQuery(cdr, "org.example::bp_trend", null, Opts)
+in
+    Table.Combine({Uids, Bps})
+```
+
+## What's always on (PHI-safe or not)
+
+These hold unconditionally because they are baked into the connector's design:
+
+- **No row-level tracing.** Page payloads are never written to trace, whatever the trace level.
+- **No AQL text at `Information`.** Query text is only traced at `Verbose`.
+- **`ExcludedFromCacheKey = {"Authorization", "X-Audit-Context"}`** on every `Web.Contents` call.
+- **Credentials via `Extension.CurrentCredential()`** — they cannot leak into a saved `.pbix`.
 
 ## Interplay with Power BI tracing
 
@@ -56,12 +78,20 @@ Power BI Desktop writes traces to:
 %USERPROFILE%\AppData\Local\Microsoft\Power BI Desktop\Traces\
 ```
 
-Even with PHI-safe mode on, **the Mashup engine itself** may emit row counts and schema info at Verbose. If you are threat-modelling the trace directory, treat the whole directory as sensitive and rotate it off the host.
+Even with `PhiSafe = true`, **the Mashup engine itself** may emit row counts and schema info at Verbose. If you are threat-modelling the trace directory, treat the whole directory as sensitive and rotate it off the host.
+
+## Deferred (post-v0.1.0)
+
+- AQL-body SHA-256 prefix in traces (replace the `Verbose` full-text emission).
+- Stable pseudonyms for nav-table `ehr_id` folder names.
+- `QueryParameters` key-only tracing.
+
+These land in Phase 3 once the trace layer itself is overhauled.
 
 ## Related
 
+- [Options reference — `PhiSafe`](../reference/options.md)
 - [Error codes](../reference/error-codes.md)
-- [Options reference](../reference/options.md)
 - [Troubleshooting — reading `mashup-trace.json`](../troubleshooting.md)
 
 [← Back to Home](../index.md)
