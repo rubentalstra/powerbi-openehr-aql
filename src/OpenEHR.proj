@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.PowerQuery.SdkTools">
+  <!--
+    MSBuild project for the openEHR AQL Power BI custom connector.
+    Built on Windows (or Windows CI) with the Microsoft.PowerQuery.SdkTools MSBuild SDK.
+    See: https://learn.microsoft.com/en-us/power-query/install-sdk
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <!-- The connector name is the .mez/.pqx file name. Do not change casing. -->
+    <PQExtensionName>OpenEHR</PQExtensionName>
+    <SuppressCertificateWarning>true</SuppressCertificateWarning>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="OpenEHR.pq" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Embedded resources packed into the .mez/.pqx. -->
+    <Content Include="resources.resx" />
+    <Content Include="OpenEHR16.png" />
+    <Content Include="OpenEHR20.png" />
+    <Content Include="OpenEHR24.png" />
+    <Content Include="OpenEHR32.png" />
+    <Content Include="OpenEHR40.png" />
+    <Content Include="OpenEHR48.png" />
+    <Content Include="lib\Aql.pqm" />
+    <Content Include="lib\Paging.pqm" />
+    <Content Include="lib\Schema.pqm" />
+    <Content Include="lib\Navigation.pqm" />
+  </ItemGroup>
+</Project>

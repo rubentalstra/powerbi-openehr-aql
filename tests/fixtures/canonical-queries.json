@@ -1,0 +1,46 @@
+{
+  "$schema": "./canonical-queries.schema.json",
+  "queries": [
+    {
+      "id": "composition_count_by_template",
+      "description": "Number of compositions grouped by template.",
+      "aql": "SELECT c/archetype_details/template_id/value AS Template, COUNT(c) AS N FROM EHR e CONTAINS COMPOSITION c GROUP BY c/archetype_details/template_id/value",
+      "assertColumns": ["Template", "N"],
+      "assertMinRows": 1,
+      "allowEmpty": false
+    },
+    {
+      "id": "latest_bp_per_ehr",
+      "description": "Latest blood pressure per EHR (systolic + diastolic).",
+      "aql": "SELECT e/ehr_id/value AS EhrId, o/data[at0001]/events[at0006]/data[at0003]/items[at0004]/value/magnitude AS Systolic, o/data[at0001]/events[at0006]/data[at0003]/items[at0005]/value/magnitude AS Diastolic, o/data[at0001]/events[at0006]/time/value AS Taken FROM EHR e CONTAINS COMPOSITION c CONTAINS OBSERVATION o [openEHR-EHR-OBSERVATION.blood_pressure.v2] ORDER BY Taken DESC LIMIT 100",
+      "assertColumns": ["EhrId", "Systolic", "Diastolic", "Taken"],
+      "assertMinRows": 0,
+      "allowEmpty": true
+    },
+    {
+      "id": "lab_results_by_date_range",
+      "description": "Lab results within a relative date window (last 365 days).",
+      "aql": "SELECT e/ehr_id/value AS EhrId, o/data[at0001]/events[at0002]/data[at0003]/items[at0005]/value/magnitude AS Value, o/data[at0001]/events[at0002]/data[at0003]/items[at0005]/value/units AS Units, o/data[at0001]/events[at0002]/time/value AS Taken FROM EHR e CONTAINS COMPOSITION c CONTAINS OBSERVATION o [openEHR-EHR-OBSERVATION.laboratory_test_result.v1] WHERE o/data[at0001]/events[at0002]/time/value >= :from AND o/data[at0001]/events[at0002]/time/value <= :to",
+      "queryParameters": { "from": "2025-04-22T00:00:00Z", "to": "2026-04-22T23:59:59Z" },
+      "assertColumns": ["EhrId", "Value", "Units", "Taken"],
+      "assertMinRows": 0,
+      "allowEmpty": true
+    },
+    {
+      "id": "demographics_summary",
+      "description": "Count EHRs by gender from demographic composition.",
+      "aql": "SELECT e/ehr_status/subject/external_ref/id/value AS SubjectId, e/ehr_id/value AS EhrId FROM EHR e",
+      "assertColumns": ["SubjectId", "EhrId"],
+      "assertMinRows": 1,
+      "allowEmpty": false
+    },
+    {
+      "id": "smoke_limit_1",
+      "description": "Minimal sanity query — should work on any seeded EHRbase.",
+      "aql": "SELECT e/ehr_id/value AS EhrId FROM EHR e LIMIT 1",
+      "assertColumns": ["EhrId"],
+      "assertMinRows": 0,
+      "allowEmpty": true
+    }
+  ]
+}

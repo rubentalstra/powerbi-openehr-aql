@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <data name="DataSourceLabel">
+    <value>openEHR</value>
+  </data>
+  <data name="ButtonTitle">
+    <value>openEHR (Beta)</value>
+  </data>
+  <data name="ButtonHelp">
+    <value>Run openEHR AQL queries against any openEHR Clinical Data Repository.</value>
+  </data>
+  <data name="BasicAuthLabel">
+    <value>Username and password</value>
+  </data>
+  <data name="UsernameLabel">
+    <value>CDR username</value>
+  </data>
+  <data name="PasswordLabel">
+    <value>CDR password</value>
+  </data>
+  <data name="OpenEHR.AqlError">
+    <value>The CDR rejected the AQL query. Verify syntax and that referenced archetypes are installed.</value>
+  </data>
+  <data name="OpenEHR.AuthError">
+    <value>Authentication failed. Verify credentials in Power BI Desktop: File &gt; Options &gt; Data source settings.</value>
+  </data>
+  <data name="OpenEHR.TimeoutError">
+    <value>The CDR took longer than the configured Timeout to respond.</value>
+  </data>
+  <data name="OpenEHR.NotFoundError">
+    <value>The requested resource does not exist on the CDR.</value>
+  </data>
+  <data name="OpenEHR.HttpError">
+    <value>The CDR returned an unexpected HTTP error. See the error details record for the response body.</value>
+  </data>
+</root>

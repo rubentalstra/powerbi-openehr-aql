@@ -1,0 +1,161 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EHRBASE_VERSION: "2.15.0"
+  POSTGRES_VERSION: "16.4-alpine"
+  EHRBASE_USER: ehrbase
+  EHRBASE_PASSWORD: ehrbase
+  EHRBASE_PORT: 8080
+
+jobs:
+  build:
+    name: Build connector (windows-latest)
+    runs-on: windows-latest
+    outputs:
+      mez-path: ${{ steps.locate.outputs.mez }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install MakePQX (Microsoft.PowerQuery.SdkTools)
+        shell: pwsh
+        run: |
+          dotnet tool install -g Microsoft.PowerQuery.SdkTools
+          echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Pack .mez
+        shell: pwsh
+        working-directory: src
+        run: |
+          MakePQX pack
+          Get-ChildItem -Recurse -Filter *.mez | ForEach-Object { Write-Host "Built: $($_.FullName)" }
+
+      - name: Locate .mez
+        id: locate
+        shell: pwsh
+        run: |
+          $mez = Get-ChildItem -Recurse -Path src -Filter OpenEHR.mez | Select-Object -First 1
+          if (-not $mez) { throw "OpenEHR.mez not found." }
+          "mez=$($mez.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenEHR-mez
+          path: ${{ steps.locate.outputs.mez }}
+          retention-days: 14
+
+  integration:
+    name: Canonical AQL smoke tests
+    runs-on: ubuntu-latest
+    services:
+      ehrbase-postgres:
+        image: postgres:16.4-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          EHRBASE_USER: ehrbase
+          EHRBASE_PASSWORD: ehrbase
+          EHRBASE_USER_ADMIN: ehrbase_admin
+          EHRBASE_PASSWORD_ADMIN: ehrbase_admin
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      ehrbase:
+        image: ehrbase/ehrbase:2.15.0
+        env:
+          DB_URL: jdbc:postgresql://ehrbase-postgres:5432/ehrbase
+          DB_USER: ehrbase
+          DB_PASS: ehrbase
+          DB_USER_ADMIN: ehrbase_admin
+          DB_PASS_ADMIN: ehrbase_admin
+          SECURITY_AUTHTYPE: BASIC
+          SECURITY_AUTHUSER: ehrbase
+          SECURITY_AUTHPASSWORD: ehrbase
+          SECURITY_AUTHADMINUSER: ehrbase_admin
+          SECURITY_AUTHADMINPASSWORD: ehrbase_admin
+        ports: ["8080:8080"]
+        options: >-
+          --health-cmd "wget -qO- http://localhost:8080/ehrbase/management/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 18
+          --health-start-period 30s
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Wait for EHRbase health
+        run: |
+          for i in $(seq 1 90); do
+            if curl -fsS -u ehrbase:ehrbase http://localhost:8080/ehrbase/management/health | grep -q '"UP"'; then
+              echo "EHRbase is UP"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "EHRbase did not become healthy in 180s" >&2
+          exit 1
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Load seed data
+        if: hashFiles('dev/seed-data/templates/*.opt') != ''
+        run: bash dev/scripts/load-seed.sh
+
+      - name: Probe endpoints
+        run: bash dev/scripts/check-health.sh
+
+      - name: Run canonical queries
+        if: hashFiles('tests/fixtures/canonical-queries.json') != ''
+        run: bash tests/integration/run-canonical.sh http://localhost:8080/ehrbase/rest/openehr/v1
+
+  lint:
+    name: Lint YAML + PowerShell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: yamllint
+        run: yamllint -d "{extends: default, rules: {line-length: disable, document-start: disable, truthy: {check-keys: false}}}" .github dev
+
+      - name: PowerShell analyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $results = Invoke-ScriptAnalyzer -Path dev/scripts -Recurse -Severity Warning
+          if ($results) { $results | Format-Table; exit 1 }
