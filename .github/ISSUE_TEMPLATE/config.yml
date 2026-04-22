@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and discussion
+    url: https://github.com/rubentalstra/powerbi-openehr-aql/discussions
+    about: Ask questions, share what you built, or discuss ideas before filing an issue.
+  - name: AQL syntax help
+    url: https://discourse.openehr.org/
+    about: Questions about AQL grammar, archetypes, or CDR behavior belong on the openEHR Discourse.

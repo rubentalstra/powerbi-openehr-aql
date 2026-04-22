@@ -1,0 +1,19 @@
+title: "[Show & Tell] "
+labels:
+  - show-and-tell
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What did you build
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or a short clip
+  - type: textarea
+    id: stack
+    attributes:
+      label: CDR + dataset
+      description: Which CDR, which templates, how big.

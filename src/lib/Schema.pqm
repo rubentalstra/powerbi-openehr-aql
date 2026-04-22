@@ -1,0 +1,162 @@
+// Schema.pqm — AQL result-set → Power Query table, with optional RM-object flattening.
+//
+// Result-set shape (current ITS-REST):
+//   { meta, q, columns: [ {name?, path}, ... ], rows: [ [v0, v1, ...], ... ] }
+//
+// Flattening policy (per IMPLEMENTATION_PLAN.md gotcha list):
+//   - Column names prefer `name` (the AS alias); fall back to `path` when missing.
+//   - Type detection samples the first NON-NULL row — never row 0 blindly.
+//   - Known RM types expand into scalar columns via RmExpanders.
+//   - Unknown record-shaped values fall back to `<col>_json` text.
+//   - Empty result sets still return a typed empty table so schema is stable.
+
+let
+    RmExpanders = [
+        DV_QUANTITY = (v) =>
+            [
+                _magnitude = Record.FieldOrDefault(v, "magnitude", null),
+                _units     = Record.FieldOrDefault(v, "units",     null),
+                _precision = Record.FieldOrDefault(v, "precision", null)
+            ],
+
+        DV_CODED_TEXT = (v) =>
+            let
+                defining = Record.FieldOrDefault(v, "defining_code", null),
+                termId   = if defining <> null then Record.FieldOrDefault(defining, "terminology_id", null) else null
+            in
+                [
+                    _value       = Record.FieldOrDefault(v, "value", null),
+                    _code        = if defining <> null then Record.FieldOrDefault(defining, "code_string", null) else null,
+                    _terminology = if termId   <> null then Record.FieldOrDefault(termId,   "value",       null) else null
+                ],
+
+        DV_TEXT       = (v) => [ _value     = Record.FieldOrDefault(v, "value",     null) ],
+        DV_DATE_TIME  = (v) => [ _value     = Record.FieldOrDefault(v, "value",     null) ],
+        DV_DATE       = (v) => [ _value     = Record.FieldOrDefault(v, "value",     null) ],
+        DV_BOOLEAN    = (v) => [ _value     = Record.FieldOrDefault(v, "value",     null) ],
+        DV_COUNT      = (v) => [ _magnitude = Record.FieldOrDefault(v, "magnitude", null) ],
+        DV_IDENTIFIER = (v) =>
+            [
+                _id       = Record.FieldOrDefault(v, "id",       null),
+                _type     = Record.FieldOrDefault(v, "type",     null),
+                _issuer   = Record.FieldOrDefault(v, "issuer",   null),
+                _assigner = Record.FieldOrDefault(v, "assigner", null)
+            ]
+    ],
+
+    ResultSetToTable = (rs as record, optional expandRm as nullable logical) as table =>
+        let
+            expand   = if expandRm = null then true else expandRm,
+            columns  = Record.FieldOrDefault(rs, "columns", {}),
+            rows     = Record.FieldOrDefault(rs, "rows",    {}),
+
+            colNames = List.Transform(
+                columns,
+                each
+                    let
+                        name = Record.FieldOrDefault(_, "name", null),
+                        path = Record.FieldOrDefault(_, "path", "col")
+                    in
+                        if name <> null and name <> "" then name else path
+            ),
+
+            // Disambiguate duplicate / empty names — PQ requires unique column names.
+            uniqueNames = DisambiguateNames(colNames),
+
+            baseTable = if List.IsEmpty(rows)
+                then #table(uniqueNames, {})
+                else #table(uniqueNames, rows),
+
+            // Sample the first non-null value per column for type detection.
+            sampleRow = FirstNonNullRow(rows),
+
+            result    = if expand then ExpandRmColumns(baseTable, sampleRow, uniqueNames) else baseTable
+        in
+            result,
+
+    DisambiguateNames = (names as list) as list =>
+        let
+            acc = List.Accumulate(
+                names,
+                [out = {}, seen = []],
+                (state, name) =>
+                    let
+                        safeName = if name = null or name = "" then "col" else name,
+                        priorCount = Record.FieldOrDefault(state[seen], safeName, 0),
+                        finalName = if priorCount = 0 then safeName else safeName & "_" & Number.ToText(priorCount + 1),
+                        nextSeen = Record.AddField(
+                            Record.RemoveFields(state[seen], {safeName}, MissingField.Ignore),
+                            safeName,
+                            priorCount + 1
+                        )
+                    in
+                        [out = state[out] & {finalName}, seen = nextSeen]
+            )
+        in
+            acc[out],
+
+    FirstNonNullRow = (rows as list) as nullable list =>
+        List.First(
+            List.Select(rows, each List.MatchesAny(_, each _ <> null)),
+            null
+        ),
+
+    ExpandRmColumns = (t as table, sample as nullable list, colNames as list) as table =>
+        if sample = null then
+            t
+        else
+            List.Accumulate(
+                List.Positions(colNames),
+                t,
+                (acc, i) =>
+                    let
+                        colName = colNames{i},
+                        cellSample = try sample{i} otherwise null,
+                        rmType  = if cellSample is record then Record.FieldOrDefault(cellSample, "_type", null) else null
+                    in
+                        if rmType <> null and Record.HasFields(RmExpanders, {rmType}) then
+                            ExpandKnownRm(acc, colName, Record.Field(RmExpanders, rmType))
+                        else if cellSample is record then
+                            FallbackJsonColumn(acc, colName)
+                        else
+                            acc
+            ),
+
+    ExpandKnownRm = (t as table, colName as text, expander as function) as table =>
+        let
+            tmpCol = colName & "__rmx",
+            withExpanded = Table.AddColumn(
+                t,
+                tmpCol,
+                each
+                    let v = Record.Field(_, colName)
+                    in if v = null then null else expander(v)
+            ),
+            sampleExpansion = List.First(
+                List.Select(Table.Column(withExpanded, tmpCol), each _ <> null),
+                null
+            ),
+            fields = if sampleExpansion <> null then Record.FieldNames(sampleExpansion) else {},
+            newNames = List.Transform(fields, each colName & _),
+            expanded = if List.IsEmpty(fields)
+                then Table.RemoveColumns(withExpanded, {tmpCol})
+                else Table.ExpandRecordColumn(withExpanded, tmpCol, fields, newNames),
+            dropOriginal = Table.RemoveColumns(expanded, {colName}, MissingField.Ignore)
+        in
+            dropOriginal,
+
+    FallbackJsonColumn = (t as table, colName as text) as table =>
+        Table.TransformColumns(
+            t,
+            {{
+                colName,
+                each if _ = null then null else Text.FromBinary(Json.FromValue(_)),
+                type nullable text
+            }},
+            MissingField.Ignore
+        )
+in
+    [
+        ResultSetToTable = ResultSetToTable,
+        RmExpanders      = RmExpanders
+    ]

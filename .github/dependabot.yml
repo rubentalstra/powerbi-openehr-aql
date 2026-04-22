@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "ci"
+
+  # Enable once docs requirements.txt exists.
+  # - package-ecosystem: "pip"
+  #   directory: "/docs"
+  #   schedule:
+  #     interval: "weekly"
+
+  # Enable once Docker base images are pinned in a Dockerfile.
+  # - package-ecosystem: "docker"
+  #   directory: "/dev"
+  #   schedule:
+  #     interval: "weekly"

@@ -1,0 +1,70 @@
+name: Bug report
+description: Something in the connector is broken or behaves unexpectedly.
+title: "[bug]: "
+labels:
+  - bug
+  - triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Redact all PHI** from queries, responses, and error details before submitting.
+  - type: input
+    id: connector-version
+    attributes:
+      label: Connector version
+      placeholder: "v0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: pbi-version
+    attributes:
+      label: Power BI Desktop version
+      placeholder: "2.129.x"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "Windows 11 23H2"
+    validations:
+      required: true
+  - type: input
+    id: cdr-vendor
+    attributes:
+      label: CDR vendor and version
+      placeholder: "EHRbase 2.x.x"
+    validations:
+      required: true
+  - type: textarea
+    id: aql
+    attributes:
+      label: AQL query (PHI-redacted)
+      render: sql
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Full error record
+      description: Paste the full M error record or gateway log (PHI-redacted).
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Numbered steps. Include expected vs. actual.
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Pre-submit checks
+      options:
+        - label: I removed all patient-identifying data.
+          required: true
+        - label: I searched existing issues for duplicates.
+          required: true

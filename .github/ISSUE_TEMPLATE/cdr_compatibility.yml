@@ -1,0 +1,43 @@
+name: CDR compatibility report
+description: Report how the connector behaves against a specific CDR product/version.
+title: "[cdr]: <vendor> <version>"
+labels:
+  - cdr-compat
+  - triage
+body:
+  - type: input
+    id: vendor
+    attributes:
+      label: CDR vendor
+      placeholder: "EHRbase / Better Platform / Code24 / DIPS / other"
+    validations:
+      required: true
+  - type: input
+    id: vendor-version
+    attributes:
+      label: Vendor version
+    validations:
+      required: true
+  - type: input
+    id: rest-version
+    attributes:
+      label: openEHR REST API version
+      placeholder: "ITS-REST 1.0.3"
+    validations:
+      required: true
+  - type: textarea
+    id: works
+    attributes:
+      label: What works
+    validations:
+      required: true
+  - type: textarea
+    id: fails
+    attributes:
+      label: What fails
+  - type: textarea
+    id: sample
+    attributes:
+      label: Sample request / response
+      description: PHI-redacted. Helps us build the compatibility matrix.
+      render: json

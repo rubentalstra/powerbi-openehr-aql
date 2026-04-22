@@ -1,0 +1,105 @@
+// Aql.pqm — HTTP transport for openEHR AQL.
+//
+// Public members:
+//   Execute(cdrBaseUrl, aql, queryParameters?, offset?, fetchCount?, timeout?)  -> record
+//   AuthHeader()                                                                 -> record
+//
+// Gotchas enforced here:
+//   - Web.Contents base URL is the un-mutated `cdrBaseUrl` argument (static from PQ's view).
+//     Variability goes into RelativePath / Query / Headers / Content.
+//   - ExcludedFromCacheKey = {"Authorization"} — rotating tokens must not poison the cache.
+//   - ManualStatusHandling covers the codes we map into OpenEHR.* error categories.
+//   - AQL body uses `query_parameters` (underscore) per the current spec.
+
+let
+    Execute = (
+        cdrBaseUrl as text,
+        aql as text,
+        optional queryParameters as nullable record,
+        optional offset as nullable number,
+        optional fetchCount as nullable number,
+        optional timeout as nullable duration
+    ) as record =>
+        let
+            body = [q = aql]
+                & (if queryParameters <> null then [query_parameters = queryParameters] else [])
+                & (if offset         <> null then [offset           = offset]          else [])
+                & (if fetchCount     <> null then [fetch            = fetchCount]      else []),
+            bodyJson = Json.FromValue(body),
+            headers  = [#"Content-Type" = "application/json", #"Accept" = "application/json"] & AuthHeader(),
+            response = Web.Contents(
+                cdrBaseUrl,
+                [
+                    RelativePath          = "query/aql",
+                    Headers               = headers,
+                    Content               = bodyJson,
+                    Timeout               = if timeout <> null then timeout else #duration(0, 0, 2, 0),
+                    ManualStatusHandling  = {400, 401, 403, 404, 408, 409, 413, 429, 500, 502, 503, 504},
+                    ExcludedFromCacheKey  = {"Authorization"}
+                ]
+            ),
+            buffered = Binary.Buffer(response),
+            meta     = Value.Metadata(response),
+            status   = meta[Response.Status],
+            result   =
+                if status >= 200 and status < 300 then
+                    Json.Document(buffered)
+                else
+                    RaiseError(status, buffered, aql)
+        in
+            result,
+
+    AuthHeader = () as record =>
+        let
+            cred = Extension.CurrentCredential(),
+            kind = cred[AuthenticationKind],
+            header =
+                if kind = "UsernamePassword" then
+                    let
+                        pair    = cred[Username] & ":" & cred[Password],
+                        encoded = Binary.ToText(Text.ToBinary(pair, TextEncoding.Utf8), BinaryEncoding.Base64)
+                    in
+                        [#"Authorization" = "Basic " & encoded]
+                else if kind = "Anonymous" then
+                    []
+                else
+                    error Error.Record(
+                        "OpenEHR.AuthError",
+                        "Unsupported authentication kind: " & kind,
+                        [AuthenticationKind = kind]
+                    )
+        in
+            header,
+
+    RaiseError = (status as number, responseBody as binary, aql as text) as any =>
+        let
+            asText = try Text.FromBinary(responseBody) otherwise "",
+            asJson = try Json.Document(responseBody) otherwise null,
+            // EHRbase puts a human message under either `message` or `error`; fall back to body text.
+            message =
+                if asJson <> null and Record.HasFields(asJson, {"message"}) then
+                    asJson[message]
+                else if asJson <> null and Record.HasFields(asJson, {"error"}) then
+                    asJson[error]
+                else if asText <> "" then asText
+                else "HTTP " & Number.ToText(status),
+            category =
+                if status = 400 then "OpenEHR.AqlError"
+                else if status = 401 or status = 403 then "OpenEHR.AuthError"
+                else if status = 404 then "OpenEHR.NotFoundError"
+                else if status = 408 then "OpenEHR.TimeoutError"
+                else if status = 409 then "OpenEHR.ConflictError"
+                else "OpenEHR.HttpError",
+            details = [
+                Status = status,
+                Body   = if asJson <> null then asJson else asText,
+                Aql    = aql
+            ]
+        in
+            error Error.Record(category, message, details)
+in
+    [
+        Execute    = Execute,
+        AuthHeader = AuthHeader,
+        RaiseError = RaiseError
+    ]

@@ -1,0 +1,99 @@
+site_name: powerbi-openehr-aql
+site_description: Power BI custom data connector for openEHR AQL.
+site_url: https://rubentalstra.github.io/powerbi-openehr-aql/
+repo_url: https://github.com/rubentalstra/powerbi-openehr-aql
+repo_name: rubentalstra/powerbi-openehr-aql
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - toc.follow
+    - content.code.copy
+    - content.action.edit
+    - content.tabs.link
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - End-user install: getting-started/install-end-user.md
+      - Gateway admin install: getting-started/install-gateway-admin.md
+      - Unsigned / evaluation: getting-started/install-uncertified.md
+      - Self-signed cert install: getting-started/install-self-signed.md
+      - Signed cert (future): getting-started/install-signed-cert.md
+  - Authentication:
+      - Basic auth: auth/basic.md
+      - OAuth PKCE: auth/oauth-pkce.md
+      - Client credentials: auth/client-credentials.md
+      - Entra ID: auth/entra-id.md
+  - Cookbook:
+      - Blood pressure trend: cookbook/blood-pressure-trend.md
+      - Incremental refresh: cookbook/incremental-refresh.md
+      - CDR vendor notes:
+          - EHRbase: cookbook/cdr-vendor-notes/ehrbase.md
+          - Better: cookbook/cdr-vendor-notes/better.md
+          - Code24: cookbook/cdr-vendor-notes/code24.md
+          - DIPS: cookbook/cdr-vendor-notes/dips.md
+  - Reference:
+      - Functions: reference/functions.md
+      - Options: reference/options.md
+      - Error codes: reference/error-codes.md
+  - Compliance:
+      - HIPAA: compliance/hipaa.md
+      - GDPR: compliance/gdpr.md
+      - PHI-safe mode: compliance/phi-safe-mode.md
+  - Troubleshooting: troubleshooting.md
+  - Contributing:
+      - Dev environment: contributing/dev-environment.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/rubentalstra/powerbi-openehr-aql

@@ -1,0 +1,18 @@
+title: "[Idea] "
+labels:
+  - idea
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why it matters
+  - type: textarea
+    id: sketch
+    attributes:
+      label: Rough sketch / prior art

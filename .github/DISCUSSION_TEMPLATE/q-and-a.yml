@@ -1,0 +1,20 @@
+title: "[Q&A] "
+labels:
+  - q-and-a
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What are you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you tried
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Connector version, Power BI Desktop version, CDR vendor + version.

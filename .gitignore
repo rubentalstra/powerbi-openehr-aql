@@ -1,0 +1,45 @@
+# Build artifacts
+*.pqx
+*.mez
+bin/
+obj/
+
+# Signing material - NEVER commit
+*.pfx
+*.snk
+*.cer
+dev-cert.*
+
+# Environment / secrets
+.env
+.env.local
+dev/secrets/
+dev/.env
+
+# IDE / editor
+.vs/
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Claude Code per-developer overrides
+.claude/settings.local.json
+
+# Node / Python
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# MkDocs build output
+site/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs / traces
+mashup-trace.json
+*.log
