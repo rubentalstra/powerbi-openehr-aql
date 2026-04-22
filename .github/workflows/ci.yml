@@ -39,13 +39,23 @@ jobs:
           # TargetFramework in src/OpenEHR.proj is net10.0.
           dotnet-version: "10.0.x"
 
+      - name: Restore Power Query SDK
+        shell: pwsh
+        run: |
+          # Microsoft.PowerQuery.SdkTools is an MSBuild SDK pinned in /global.json.
+          # Restore it explicitly so Sdk.props exists in the NuGet cache before build.
+          dotnet restore src/OpenEHR.proj
+          $version = (Get-Content global.json | ConvertFrom-Json).'msbuild-sdks'.'Microsoft.PowerQuery.SdkTools'
+          $sdkProps = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.powerquery.sdktools\$version\Sdk\Sdk.props"
+          if (-not (Test-Path $sdkProps)) {
+            throw "Sdk.props not found at $sdkProps after restore."
+          }
+          Write-Output "Restored $sdkProps"
+
       - name: Build .mez
         shell: pwsh
         run: |
-          # src/OpenEHR.proj declares <Project Sdk="Microsoft.PowerQuery.SdkTools">;
-          # the SDK version is pinned in /global.json and NuGet-restored during
-          # `dotnet build`. This produces src/bin/<Configuration>/<TFM>/OpenEHR.mez.
-          dotnet build src/OpenEHR.proj --configuration Release
+          dotnet build src/OpenEHR.proj --configuration Release --no-restore
           Get-ChildItem -Recurse -Path src\bin -Filter *.mez | ForEach-Object { Write-Host "Built: $($_.FullName)" }
 
       - name: Locate .mez

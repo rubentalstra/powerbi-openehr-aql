@@ -29,10 +29,11 @@ shopt -s nullglob
 template_count=0
 for opt in "${SEED_DIR}/templates/"*.opt; do
   echo "  uploading $(basename "${opt}")"
+  # Newer EHRbase builds do not guarantee a JSON response for template upload.
+  # Forcing Accept: application/json can yield HTTP 406 even when the OPT is valid.
   code=$(curl -sS -o /tmp/tpl-resp -w "%{http_code}" \
     "${auth[@]}" \
     -H "Content-Type: application/xml" \
-    -H "Accept: application/json" \
     --data-binary @"${opt}" \
     -X POST "${BASE}/definition/template/adl1.4")
   if [[ "${code}" == "201" || "${code}" == "204" || "${code}" == "409" ]]; then

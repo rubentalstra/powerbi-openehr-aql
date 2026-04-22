@@ -29,8 +29,10 @@ $templateCount = 0
 Get-ChildItem -Path (Join-Path $SeedDir 'templates') -Filter '*.opt' -File | ForEach-Object {
     Write-Output "  uploading $($_.Name)"
     $bytes = [IO.File]::ReadAllBytes($_.FullName)
+    # Newer EHRbase builds do not guarantee a JSON response for template upload.
+    # Forcing Accept: application/json can yield HTTP 406 even when the OPT is valid.
     $res = Invoke-WebRequest -Uri "$base/definition/template/adl1.4" -Method Post `
-        -Headers ($auth + @{ Accept = 'application/json' }) `
+        -Headers $auth `
         -ContentType 'application/xml' -Body $bytes -SkipHttpErrorCheck
     if ($res.StatusCode -in 201, 204, 409) {
         $templateCount++
