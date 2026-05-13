@@ -37,8 +37,8 @@ Run AQL against your openEHR Clinical Data Repository directly from Power BI Des
 ## Quick install for v0.1 testers
 
 1. Download the signed `OpenEHR.pqx` (and `dev-cert.cer`) from the latest [GitHub Release](https://github.com/rubentalstra/powerbi-openehr-aql/releases).
-2. Import `dev-cert.cer` into Windows trust stores once — see [docs/getting-started/install-self-signed.md](https://rubentalstra.github.io/powerbi-openehr-aql/getting-started/install-self-signed/).
-3. Copy `OpenEHR.pqx` to `%USERPROFILE%\Documents\Power BI Desktop\Custom Connectors\` (create the folder if missing).
+2. Run `install-powerbi-connector.ps1` from an elevated PowerShell prompt — see [docs/getting-started/install-self-signed.md](https://rubentalstra.github.io/powerbi-openehr-aql/getting-started/install-self-signed/).
+3. The installer copies `OpenEHR.pqx` to `Documents\Microsoft Power BI Desktop\Custom Connectors` and trusts the signing thumbprint.
 4. Restart Power BI Desktop → **Get Data → Other → openEHR (Beta)**.
 5. For local EHRbase testing, connect to `http://localhost:8080/ehrbase/rest/openehr/v1` with username `ehrbase` and password `ehrbase`.
 

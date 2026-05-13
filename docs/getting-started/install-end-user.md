@@ -13,7 +13,7 @@ Step-by-step guide for **analysts** loading the connector on a personal Windows 
 ```mermaid
 flowchart TD
     A[Download<br/>OpenEHR.pqx + dev-cert.cer] --> B[Import cert<br/>LocalMachine\Root + TrustedPublisher]
-    B --> C[Copy .pqx to<br/>Documents\Power BI Desktop\Custom Connectors]
+    B --> C[Copy .pqx to<br/>Documents\Microsoft Power BI Desktop\Custom Connectors]
     C --> D[Restart Power BI Desktop]
     D --> E["Get Data → Other → openEHR (Beta)"]
     E --> F[Enter CDR base URL<br/>+ sign in]
@@ -27,6 +27,7 @@ From the latest [GitHub Release](https://github.com/rubentalstra/powerbi-openehr
 | ----------------- | -------------------------------------------- |
 | `OpenEHR.pqx`     | The signed connector.                        |
 | `dev-cert.cer`    | The public cert — trust this once.           |
+| `install-powerbi-connector.ps1` | One-command Windows install helper. |
 | `SHA256SUMS.txt`  | Verify integrity before installing.          |
 
 Verify checksums in an elevated PowerShell prompt:
@@ -36,32 +37,26 @@ Get-FileHash .\OpenEHR.pqx -Algorithm SHA256
 Get-Content .\SHA256SUMS.txt | Select-String OpenEHR.pqx
 ```
 
-## 2. Trust the publisher (one-time)
+## 2. Install and trust the connector
 
-v0.1.0 ships with a **self-signed** cert. Full rationale + future plan on [Self-signed cert install](install-self-signed.md).
-
-```powershell
-Import-Certificate -FilePath .\dev-cert.cer -CertStoreLocation Cert:\LocalMachine\Root
-Import-Certificate -FilePath .\dev-cert.cer -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
-```
-
-## 3. Install the connector
+v0.1.0 ships with a **self-signed** cert. Run the installer from an elevated PowerShell prompt:
 
 ```powershell
-$dest = "$env:USERPROFILE\Documents\Power BI Desktop\Custom Connectors"
-New-Item -ItemType Directory -Force -Path $dest | Out-Null
-Copy-Item .\OpenEHR.pqx -Destination $dest -Force
+Set-ExecutionPolicy -Scope Process Bypass -Force
+.\install-powerbi-connector.ps1
 ```
 
-## 4. Power BI Desktop settings
+The installer copies the `.pqx` to the correct Documents-scoped folder, imports the public cert, and writes Power BI Desktop's trusted thumbprint policy. Full rationale + manual commands: [Self-signed cert install](install-self-signed.md).
 
-**File → Options → Security → Data Extensions** must be set to:
+## 3. Power BI Desktop settings
 
-> **(Recommended) Allow any extension to load without validation or warning**
+Keep **File → Options → Security → Data Extensions** at the default:
 
-If your IT policy blocks that, use the fully-validated self-signed path from [install-self-signed.md](install-self-signed.md) — no setting change required.
+> **(Recommended) Only allow Microsoft certified and other trusted third-party extensions to load**
 
-## 5. First sign-in
+If you skip signing/thumbprint trust and only want a quick local smoke test, use the [unsigned/evaluation path](install-uncertified.md) instead.
+
+## 4. First sign-in
 
 1. Fully quit and relaunch Power BI Desktop.
 2. **Get Data → Other → openEHR (Beta) → Connect**.
@@ -74,7 +69,8 @@ If your IT policy blocks that, use the fully-validated self-signed path from [in
 ## Uninstalling
 
 ```powershell
-Remove-Item "$env:USERPROFILE\Documents\Power BI Desktop\Custom Connectors\OpenEHR.pqx"
+$connector = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Microsoft Power BI Desktop\Custom Connectors\OpenEHR.pqx'
+Remove-Item $connector
 # Optional: also remove cached credentials in Power BI Desktop
 # File → Options → Data source settings → Global permissions → Clear
 ```

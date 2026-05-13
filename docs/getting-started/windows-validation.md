@@ -16,17 +16,13 @@ bash dev/scripts/load-seed.sh
 
 ## Install the signed connector
 
-Download `OpenEHR.pqx` and `dev-cert.cer` from the release candidate.
+Download `OpenEHR.pqx`, `dev-cert.cer`, and `install-powerbi-connector.ps1` from the release candidate.
 
 Run PowerShell as Administrator:
 
 ```powershell
-Import-Certificate -FilePath .\dev-cert.cer -CertStoreLocation Cert:\LocalMachine\Root
-Import-Certificate -FilePath .\dev-cert.cer -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
-
-$dest = "$env:USERPROFILE\Documents\Power BI Desktop\Custom Connectors"
-New-Item -ItemType Directory -Force -Path $dest | Out-Null
-Copy-Item .\OpenEHR.pqx -Destination $dest -Force
+Set-ExecutionPolicy -Scope Process Bypass -Force
+.\install-powerbi-connector.ps1
 ```
 
 ## Desktop smoke test

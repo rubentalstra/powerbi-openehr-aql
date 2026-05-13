@@ -12,9 +12,10 @@ From the latest [GitHub Release](https://github.com/rubentalstra/powerbi-openehr
 ## 2. Drop the file into place
 
 ```powershell
-$dest = "$env:USERPROFILE\Documents\Power BI Desktop\Custom Connectors"
+$dest = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Microsoft Power BI Desktop\Custom Connectors'
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 Copy-Item .\OpenEHR.pqx -Destination $dest -Force
+Unblock-File (Join-Path $dest 'OpenEHR.pqx')
 ```
 
 ## 3. Relax the data-extensions check
@@ -45,6 +46,6 @@ flowchart LR
 
 ## When you're ready to move off this mode
 
-Follow [Self-signed cert install](install-self-signed.md) — import the publisher cert once, flip the Data Extensions setting back to *Recommended*, done.
+Follow [Self-signed cert install](install-self-signed.md) — run the installer once, flip the Data Extensions setting back to *Recommended*, done.
 
 [← Back to Home](../index.md)

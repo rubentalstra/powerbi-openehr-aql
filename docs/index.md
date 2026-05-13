@@ -25,8 +25,8 @@ flowchart LR
 ## 60-second install
 
 1. Download the signed `OpenEHR.pqx` (and `dev-cert.cer`) from the latest [GitHub Release](https://github.com/rubentalstra/powerbi-openehr-aql/releases).
-2. Import `dev-cert.cer` into Windows trust stores once — see [Self-signed cert install](getting-started/install-self-signed.md).
-3. Drop `OpenEHR.pqx` into `%USERPROFILE%\Documents\Power BI Desktop\Custom Connectors\`.
+2. Run `install-powerbi-connector.ps1` from an elevated PowerShell prompt — see [Self-signed cert install](getting-started/install-self-signed.md).
+3. The installer copies `OpenEHR.pqx` to `Documents\Microsoft Power BI Desktop\Custom Connectors` and trusts the signing thumbprint.
 4. Restart Power BI Desktop → **Get Data → Other → openEHR (Beta)**.
 5. For local validation, connect to `http://localhost:8080/ehrbase/rest/openehr/v1` with Basic auth (`ehrbase` / `ehrbase`).
 

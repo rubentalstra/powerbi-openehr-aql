@@ -30,6 +30,25 @@ Either:
 1. The self-signed cert was not installed (see [install-self-signed.md](getting-started/install-self-signed.md)), OR
 2. The "Data Extensions" setting is restrictive. File → Options → Security → Data Extensions.
 
+### Connector does not appear in Get Data
+
+Check these first:
+
+```powershell
+$dest = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Microsoft Power BI Desktop\Custom Connectors'
+Get-ChildItem $dest
+Get-ItemProperty 'HKLM:\Software\Policies\Microsoft\Power BI Desktop' -Name TrustedCertificateThumbprints
+```
+
+The folder must be `Microsoft Power BI Desktop\Custom Connectors`. The older-looking `Power BI Desktop\Custom Connectors` path is wrong and the connector will not show up there.
+
+If the file is present but still hidden:
+
+- Right-click `OpenEHR.pqx` → **Properties** → **Unblock** if that checkbox appears.
+- Fully close Power BI Desktop from Task Manager, then start it again.
+- Temporarily switch **File → Options → Security → Data Extensions** to the not-recommended "allow any extension" option. If it appears in that mode, the connector package is loadable and the problem is trust/thumbprint setup.
+- Enable tracing and inspect `%LOCALAPPDATA%\Microsoft\Power BI Desktop\Traces`.
+
 ## Reading `mashup-trace.json`
 
 Power BI Desktop writes traces to:

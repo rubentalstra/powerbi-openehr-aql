@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - v0.1 Windows validation checklist and sample-PBIX validation notes for the public tester release path.
 - Release workflow now runs on published GitHub Releases as well as `v*` tag pushes / manual dispatch, attaches `OpenEHR.pqx`, `dev-cert.cer`, and `SHA256SUMS.txt` to the release, and uploads the same files as workflow artifacts.
 - `dev/scripts/install-powerquery-sdktools.ps1` centralises Power Query SDK tool installation and the MakePQX binding-redirect workaround used by CI and release workflows.
+- `dev/scripts/install-powerbi-connector.ps1` installs the signed `.pqx` into the correct Power BI Desktop custom connector folder and writes the trusted-certificate thumbprint policy.
 - **PHI-safe mode** — `PhiSafe = true` option on `OpenEHR.Aql`, `OpenEHR.StoredQuery`, `OpenEHR.Template`. Refuses HTTP Basic over plaintext `http://`, redacts `Error.Detail.Body` to `[ContentBytes, Redacted = true]`, replaces `Error.Detail.Context` with `<redacted>`, and emits generic category messages instead of vendor-provided strings. Implemented in `src/Aql.pqm` via `NormalizePolicy` + `PhiGuardNonTls` + body-summary branch in `RaiseError`.
 - **HTTP retry/backoff** — transient statuses (408, 425, 429, 500, 502, 503, 504) are retried with exponential backoff and ±30% jitter. Tunable via `RetryPolicy = [ MaxAttempts, InitialDelayMs, Jitter ]`. Driven by a `List.Generate` state machine using `Function.InvokeAfter(() => null, #duration(...))` (M-native sleep). Non-transient statuses short-circuit and fail immediately.
 - **`AuditContext`** — opaque correlation id emitted as `X-Audit-Context` on every request; always included in `ExcludedFromCacheKey` so rotating the value between refreshes does not poison the response cache.
@@ -34,6 +35,8 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - Canonical AQL fixtures now require seeded EHRbase rows for composition, blood-pressure, EHR, and smoke queries, and include an expected malformed-AQL rejection.
 - `OpenEHR.query.pq` now exercises connector pagination with `PageSize = 1`, schema flattening edge cases, duplicate aliases, unknown-record JSON fallback, empty result sets, and malformed AQL.
 - README and docs now describe the v0.1 public tester path as EHRbase Basic auth first; OAuth docs are marked experimental until validated.
+- Connector publish category moved to **Other**, matching Microsoft's custom connector samples and the documented Get Data location.
+- Installer docs now use `Documents\Microsoft Power BI Desktop\Custom Connectors` via `[Environment]::GetFolderPath('MyDocuments')`, and release assets include `TRUSTED_CERTIFICATE_THUMBPRINT.txt`.
 - **Every `Web.Contents` call now threads a normalized `policy` record** (`PhiSafe`, `AuditContext`, `MaxAttempts`, `InitialDelayMs`, `Jitter`) through `Aql[Execute]` / `Aql[ExecuteStored]` / `Aql[ListStoredQueries]` / `Aql[GetTemplate]`. `Paging.pqm` accepts an optional `policy` arg on both `GetAllPages` / `GetAllRows`. `Navigation.pqm` passes `null` to keep default behaviour.
 - **`ExcludedFromCacheKey`** widened to `{"Authorization", "X-Audit-Context"}` on every `Web.Contents` call so audit-context rotation does not poison the cache alongside token rotation.
 - **`ManualStatusHandling`** expanded to cover the full transient-retry set (408, 425, 429, 500, 502, 503, 504) in addition to the existing 400/401/403/404/409/413, so `WithRetries` can see and retry them.
@@ -48,6 +51,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 - Release verification now parses `MakePQX verify` JSON instead of using an over-escaped regex that rejected valid `SignatureStatus: Success` output.
+- Fixed install docs that used the wrong `Documents\Power BI Desktop\Custom Connectors` folder and omitted Power BI Desktop's `TrustedCertificateThumbprints` policy.
 - Release workflow no longer passes `OpenEHR.mez` to `MakePQX sign`, which caused `System.ArgumentException: Must specify an item to sign`.
 - Retry jitter no longer attempts to parse `Text.NewGuid()` as a number, which would fail on the first transient retry.
 - MkDocs `--strict` build warning about `docs/getting-started/install-self-signed.md` linking to `../../ROADMAP.md` outside `docs_dir`; the link now points at the absolute GitHub URL.

@@ -250,7 +250,7 @@ OpenEHR = [
 
 OpenEHR.Publish = [
     Beta                = true,
-    Category            = "Online Services",
+    Category            = "Other",
     ButtonText          = { Extension.LoadString("ButtonTitle"), Extension.LoadString("ButtonHelp") },
     LearnMoreUrl        = "https://github.com/rubentalstra/powerbi-openehr-aql",
     SupportsDirectQuery = false,

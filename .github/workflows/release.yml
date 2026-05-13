@@ -116,6 +116,9 @@ jobs:
           $pqx = Get-ChildItem -Recurse -Path src\bin -Filter OpenEHR.pqx | Select-Object -First 1
           Copy-Item $pqx.FullName -Destination release-assets\
           Copy-Item "$env:GITHUB_WORKSPACE\dev-cert.cer" -Destination release-assets\
+          Copy-Item "$env:GITHUB_WORKSPACE\dev\scripts\install-powerbi-connector.ps1" -Destination release-assets\
+          $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new("$env:GITHUB_WORKSPACE\dev-cert.cer")
+          $cert.Thumbprint.ToUpperInvariant() | Set-Content release-assets\TRUSTED_CERTIFICATE_THUMBPRINT.txt
           Get-ChildItem release-assets -File |
             Get-FileHash -Algorithm SHA256 |
             ForEach-Object { "$($_.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_.Path))" } |
@@ -137,6 +140,8 @@ jobs:
           files: |
             release-assets/OpenEHR.pqx
             release-assets/dev-cert.cer
+            release-assets/install-powerbi-connector.ps1
+            release-assets/TRUSTED_CERTIFICATE_THUMBPRINT.txt
             release-assets/SHA256SUMS.txt
           fail_on_unmatched_files: true
           prerelease: ${{ github.event.release.prerelease || contains(env.RELEASE_TAG, '-') }}

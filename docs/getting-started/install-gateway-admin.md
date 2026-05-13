@@ -47,6 +47,11 @@ In the gateway app (**On-premises data gateway → Connectors**), set the **Cust
 ```powershell
 Import-Certificate -FilePath .\dev-cert.cer -CertStoreLocation Cert:\LocalMachine\Root
 Import-Certificate -FilePath .\dev-cert.cer -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
+
+$thumbprint = (New-Object System.Security.Cryptography.X509Certificates.X509Certificate2('.\dev-cert.cer')).Thumbprint
+$policyPath = 'HKLM:\Software\Policies\Microsoft\Power BI Desktop'
+New-Item -Path $policyPath -Force | Out-Null
+New-ItemProperty -Path $policyPath -Name TrustedCertificateThumbprints -PropertyType MultiString -Value $thumbprint -Force | Out-Null
 ```
 
 Restart the gateway Windows service (`Restart-Service PBIEgwService`) so the trust store is re-read.
