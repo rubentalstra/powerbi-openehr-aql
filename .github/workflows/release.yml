@@ -90,7 +90,12 @@ jobs:
           $exitCode = $LASTEXITCODE
           $verifyText = $verifyOutput | Out-String
           Write-Host $verifyText
-          if ($verifyText -notmatch '"SignatureStatus"\\s*:\\s*"Success"') {
+          try {
+            $verifyJson = $verifyText | ConvertFrom-Json
+          } catch {
+            throw "MakePQX verify did not return parseable JSON. Output: $verifyText"
+          }
+          if ($verifyJson.SignatureStatus -ne "Success") {
             throw "MakePQX verify did not report SignatureStatus=Success."
           }
           if ($exitCode -ne 0) {

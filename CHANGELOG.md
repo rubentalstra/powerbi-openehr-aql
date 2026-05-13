@@ -47,6 +47,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - EHR_STATUS subject / external_ref seed payloads include the `_type` discriminators EHRbase 2.x's Jackson deserialiser requires.
 
 ### Fixed
+- Release verification now parses `MakePQX verify` JSON instead of using an over-escaped regex that rejected valid `SignatureStatus: Success` output.
 - Release workflow no longer passes `OpenEHR.mez` to `MakePQX sign`, which caused `System.ArgumentException: Must specify an item to sign`.
 - Retry jitter no longer attempts to parse `Text.NewGuid()` as a number, which would fail on the first transient retry.
 - MkDocs `--strict` build warning about `docs/getting-started/install-self-signed.md` linking to `../../ROADMAP.md` outside `docs_dir`; the link now points at the absolute GitHub URL.
