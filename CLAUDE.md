@@ -80,7 +80,7 @@ cd src
 MakePQX compile . -t OpenEHR
 
 # Sign with self-signed cert
-MakePQX sign --certificate ..\dev-cert.pfx --password $env:CODE_SIGN_CERT_PASSWORD bin\AnyCPU\Debug\OpenEHR.mez
+MakePQX pack --mez bin\AnyCPU\Debug\OpenEHR.mez --certificate ..\dev-cert.pfx --password $env:CODE_SIGN_CERT_PASSWORD --target bin\AnyCPU\Debug\OpenEHR.pqx
 
 # Run M tests against test harness
 MakePQX run OpenEHR.query.pq

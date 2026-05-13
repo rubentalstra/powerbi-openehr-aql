@@ -38,6 +38,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - **`ExcludedFromCacheKey`** widened to `{"Authorization", "X-Audit-Context"}` on every `Web.Contents` call so audit-context rotation does not poison the cache alongside token rotation.
 - **`ManualStatusHandling`** expanded to cover the full transient-retry set (408, 425, 429, 500, 502, 503, 504) in addition to the existing 400/401/403/404/409/413, so `WithRetries` can see and retry them.
 - **Docs site rewritten for Mermaid** — every ASCII diagram replaced with MkDocs Material's Mermaid custom fence (`pymdownx.superfences`). `flowchart` used for architecture / decision trees, `sequenceDiagram` for paging and OAuth flows.
+- **Release signing now uses `MakePQX pack`** to create and sign `OpenEHR.pqx` from `OpenEHR.mez`; `MakePQX sign` is only for an existing `.pqx`.
 - **Scope narrowed to EHRbase-only for `v0.1.0`.** Better Platform, Code24, and DIPS are deferred to `v1.0.0`. The connector protocol is still vendor-agnostic (standard openEHR REST), so third-party CDRs may work unchanged — file a [CDR compatibility report](https://github.com/rubentalstra/powerbi-openehr-aql/issues/new?template=cdr_compatibility.yml) if you test one.
 - **Docs deploy** switched from `gh-deploy` / `gh-pages` branch to the GitHub Pages Actions artifact flow (verified commits only — no deploy-bot commits to `gh-pages`).
 - **Repo layout** flattened: `src/*.pqm` instead of `src/lib/*.pqm`. Cross-module `.pqm` loading uses a factory-function pattern so dependencies flow in explicitly rather than via a non-existent shared helper.
@@ -46,6 +47,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - EHR_STATUS subject / external_ref seed payloads include the `_type` discriminators EHRbase 2.x's Jackson deserialiser requires.
 
 ### Fixed
+- Release workflow no longer passes `OpenEHR.mez` to `MakePQX sign`, which caused `System.ArgumentException: Must specify an item to sign`.
 - Retry jitter no longer attempts to parse `Text.NewGuid()` as a number, which would fail on the first transient retry.
 - MkDocs `--strict` build warning about `docs/getting-started/install-self-signed.md` linking to `../../ROADMAP.md` outside `docs_dir`; the link now points at the absolute GitHub URL.
 - EHRbase service container in CI was passing legacy `DB_URL` / `DB_USER` / `DB_PASS` env vars that EHRbase 2.x (Spring Boot 3.x) ignores; now uses `SPRING_DATASOURCE_*` + `SPRING_FLYWAY_*` matching `docker-compose.yml`.

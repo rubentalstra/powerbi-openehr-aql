@@ -58,7 +58,7 @@ gh workflow run ci.yml
 gh run watch
 ```
 
-The CI workflow spins up EHRbase for the canonical AQL smoke tests and separately builds an unsigned `src/bin/AnyCPU/Debug/OpenEHR.mez`. The release workflow signs that build into `OpenEHR.pqx`.
+The CI workflow spins up EHRbase for the canonical AQL smoke tests and separately builds an unsigned `src/bin/AnyCPU/Debug/OpenEHR.mez`. The release workflow packs and signs that `.mez` into `OpenEHR.pqx`.
 
 Connector-runtime validation (`MakePQX run OpenEHR.query.pq`) still needs a Windows host with Power Query SDK tooling and credentials configured for the local EHRbase source. Track that manually with the [Windows validation checklist](../getting-started/windows-validation.md).
 
@@ -70,7 +70,7 @@ The `release.yml` workflow runs on:
 - pushing a `v*` tag,
 - manual `workflow_dispatch` with an existing tag.
 
-It runs `MakePQX compile`, signs the resulting `.mez` into `OpenEHR.pqx`, exports `dev-cert.cer`, writes `SHA256SUMS.txt`, attaches those files to the GitHub Release, and also uploads them as a workflow artifact.
+It runs `MakePQX compile`, packs and signs the resulting `.mez` into `OpenEHR.pqx`, exports `dev-cert.cer`, writes `SHA256SUMS.txt`, attaches those files to the GitHub Release, and also uploads them as a workflow artifact.
 
 Required repository secrets:
 
@@ -91,11 +91,12 @@ Only needed if you want a personal build to load in Power BI Desktop before CI c
 Set-Location src
 MakePQX compile . -t OpenEHR
 
-# Sign with the dev self-signed PFX
-MakePQX sign `
+# Pack and sign with the dev self-signed PFX
+MakePQX pack `
+  --mez bin\AnyCPU\Debug\OpenEHR.mez `
   --certificate ..\dev-cert.pfx `
   --password $env:CODE_SIGN_CERT_PASSWORD `
-  bin\AnyCPU\Debug\OpenEHR.mez
+  --target bin\AnyCPU\Debug\OpenEHR.pqx
 ```
 
 ## Repo map

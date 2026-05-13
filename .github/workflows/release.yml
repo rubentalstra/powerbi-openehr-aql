@@ -62,24 +62,39 @@ jobs:
             Write-Warning "MakePQX exited with code $exitCode after producing OpenEHR.mez; continuing."
           }
 
-      - name: Sign → .pqx
+      - name: Pack and sign .pqx
         shell: pwsh
         run: |
           $mez = Get-ChildItem -Recurse -Path src\bin -Filter OpenEHR.mez | Select-Object -First 1
           if (-not $mez) { throw "OpenEHR.mez not found under src\\bin" }
-          MakePQX sign --certificate "$env:GITHUB_WORKSPACE\dev-cert.pfx" --password $env:CODE_SIGN_CERT_PASSWORD $mez.FullName
-          Get-ChildItem -Recurse -Path src\bin -Filter OpenEHR.pqx | ForEach-Object { Write-Host "Signed: $($_.FullName)" }
+          $target = Join-Path $mez.DirectoryName "OpenEHR.pqx"
+          & MakePQX pack `
+            --mez $mez.FullName `
+            --certificate "$env:GITHUB_WORKSPACE\dev-cert.pfx" `
+            --password $env:CODE_SIGN_CERT_PASSWORD `
+            --target $target
+          if ($LASTEXITCODE -ne 0) {
+            throw "MakePQX pack failed with exit code $LASTEXITCODE."
+          }
+          if (-not (Test-Path $target)) {
+            throw "MakePQX pack did not produce $target."
+          }
+          Write-Host "Packed and signed: $target"
 
-      - name: Verify Authenticode signature
+      - name: Verify .pqx signature
         shell: pwsh
         run: |
           $pqx = Get-ChildItem -Recurse -Path src\bin -Filter OpenEHR.pqx | Select-Object -First 1
           if (-not $pqx) { throw "OpenEHR.pqx not found" }
-          $sig = Get-AuthenticodeSignature $pqx.FullName
-          Write-Host "Status: $($sig.Status)"
-          Write-Host "Signer: $($sig.SignerCertificate.Subject)"
-          if ($sig.Status -ne 'Valid' -and $sig.Status -ne 'UnknownError') {
-            throw "Signature status unexpected: $($sig.Status)"
+          $verifyOutput = & MakePQX verify $pqx.FullName 2>&1
+          $exitCode = $LASTEXITCODE
+          $verifyText = $verifyOutput | Out-String
+          Write-Host $verifyText
+          if ($verifyText -notmatch '"SignatureStatus"\\s*:\\s*"Success"') {
+            throw "MakePQX verify did not report SignatureStatus=Success."
+          }
+          if ($exitCode -ne 0) {
+            Write-Warning "MakePQX verify exited with $exitCode. Continuing because self-signed certs can report an untrusted root until dev-cert.cer is installed."
           }
 
       - name: Export public .cer
