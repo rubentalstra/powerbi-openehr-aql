@@ -3,19 +3,19 @@
   "queries": [
     {
       "id": "composition_count_by_template",
-      "description": "Templates referenced by compositions (aggregation is done client-side; EHRbase 2.15 doesn't parse GROUP BY in free-form AQL).",
+      "description": "Templates referenced by seeded compositions.",
       "aql": "SELECT c/archetype_details/template_id/value AS Template FROM EHR e CONTAINS COMPOSITION c",
       "assertColumns": ["Template"],
-      "assertMinRows": 0,
-      "allowEmpty": true
+      "assertMinRows": 2,
+      "allowEmpty": false
     },
     {
       "id": "latest_bp_per_ehr",
       "description": "Latest blood pressure per EHR (systolic + diastolic). ORDER BY uses the full path, not the SELECT alias — EHRbase's AQL parser rejects alias references in ORDER BY.",
       "aql": "SELECT e/ehr_id/value AS EhrId, o/data[at0001]/events[at0006]/data[at0003]/items[at0004]/value/magnitude AS Systolic, o/data[at0001]/events[at0006]/data[at0003]/items[at0005]/value/magnitude AS Diastolic, o/data[at0001]/events[at0006]/time/value AS Taken FROM EHR e CONTAINS COMPOSITION c CONTAINS OBSERVATION o [openEHR-EHR-OBSERVATION.blood_pressure.v2] ORDER BY o/data[at0001]/events[at0006]/time/value DESC LIMIT 100",
       "assertColumns": ["EhrId", "Systolic", "Diastolic", "Taken"],
-      "assertMinRows": 0,
-      "allowEmpty": true
+      "assertMinRows": 2,
+      "allowEmpty": false
     },
     {
       "id": "lab_results_by_date_range",
@@ -31,16 +31,25 @@
       "description": "EHR list with subject external ref. (Gender aggregation moved to a future demographics seed; plain EHR projection for now.)",
       "aql": "SELECT e/ehr_status/subject/external_ref/id/value AS SubjectId, e/ehr_id/value AS EhrId FROM EHR e",
       "assertColumns": ["SubjectId", "EhrId"],
-      "assertMinRows": 0,
-      "allowEmpty": true
+      "assertMinRows": 1,
+      "allowEmpty": false
     },
     {
       "id": "smoke_limit_1",
       "description": "Minimal sanity query — should work on any seeded EHRbase.",
       "aql": "SELECT e/ehr_id/value AS EhrId FROM EHR e LIMIT 1",
       "assertColumns": ["EhrId"],
+      "assertMinRows": 1,
+      "allowEmpty": false
+    },
+    {
+      "id": "invalid_aql_rejected",
+      "description": "Negative smoke test: malformed AQL must be rejected by the CDR.",
+      "aql": "SELECT FROM THIS IS NOT VALID AQL",
+      "assertColumns": [],
       "assertMinRows": 0,
-      "allowEmpty": true
+      "allowEmpty": true,
+      "expectedError": "__any__"
     }
   ]
 }

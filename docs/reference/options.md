@@ -7,9 +7,9 @@
 | Option             | Type       | Default                | Meaning                                                                                                         |
 | ------------------ | ---------- | ---------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `PageSize`         | `number`   | `1000`                 | Rows per server round-trip during lag-one pagination.                                                           |
-| `ExpandRmObjects`  | `logical`  | `true`                 | If `true`, flatten `DV_QUANTITY`, `DV_CODED_TEXT`, `DV_DATE_TIME`, `DV_IDENTIFIER`, `PARTY_SELF`, … to scalars. |
+| `ExpandRmObjects`  | `logical`  | `true`                 | If `true`, flatten known RM value objects such as `DV_QUANTITY`, `DV_CODED_TEXT`, `DV_DATE_TIME`, and `DV_IDENTIFIER` to scalars. |
 | `Timeout`          | `duration` | `#duration(0,0,2,0)`   | Per-request timeout. Applied to every page fetch.                                                               |
-| `QueryParameters`  | `record`   | `null`                 | Values substituted into `:name` placeholders in the AQL (serialised as `query_parameters`).                     |
+| `QueryParameters`  | `record`   | `null`                 | Values substituted into `$name` placeholders in the AQL (serialised as `query_parameters`).                     |
 | `PhiSafe`          | `logical`  | `false`                | Redact error-body content + refuse Basic auth over `http://`. See [PHI-safe mode](../compliance/phi-safe-mode.md). |
 | `RetryPolicy`      | `record`   | `null`                 | `[MaxAttempts, InitialDelayMs, Jitter]` — controls transient-status backoff.                                    |
 | `AuditContext`     | `text`     | `null`                 | Opaque correlation id. Echoed as `X-Audit-Context` on every request.                                            |
@@ -43,7 +43,7 @@ Tuning:
 
 ## `ExpandRmObjects`
 
-Record-shaped columns become multiple scalar columns. Column names are the RM path joined with `.` — e.g. `DV_QUANTITY` → `Systolic.magnitude`, `Systolic.units`, `Systolic.precision`.
+Record-shaped columns become multiple scalar columns. Column names use the original alias plus a suffix — e.g. `DV_QUANTITY` → `Systolic_magnitude`, `Systolic_units`, `Systolic_precision`.
 
 Setting this `false`:
 
@@ -59,12 +59,12 @@ The default of **2 minutes** is already generous for page-level calls; increase 
 
 ## `QueryParameters`
 
-A record whose fields become `:name` substitutions in the AQL. Values go into the request body's `query_parameters` (underscore form, per current openEHR spec).
+A record whose fields become `$name` substitutions in the AQL. Values go into the request body's `query_parameters` (underscore form, per current openEHR spec).
 
 ```m
 OpenEHR.Aql(cdr,
     "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c
-     WHERE c/context/start_time/value >= :rangeStart",
+     WHERE c/context/start_time/value >= $rangeStart",
     [ QueryParameters = [ rangeStart = "2024-01-01T00:00:00Z" ] ]
 )
 ```
@@ -72,7 +72,7 @@ OpenEHR.Aql(cdr,
 Use cases:
 
 - **[Incremental refresh](../cookbook/incremental-refresh.md)** — wire `RangeStart` / `RangeEnd` into AQL time filters.
-- **Multi-tenant dashboards** — parameterise on `:tenantId` to let one report serve many tenants.
+- **Multi-tenant dashboards** — parameterise on `$tenantId` to let one report serve many tenants.
 - **Avoid string-concatenating AQL** — placeholders are less error-prone and sidestep escaping concerns.
 
 !!! warning "Underscore, not hyphen"

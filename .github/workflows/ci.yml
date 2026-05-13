@@ -36,29 +36,22 @@ jobs:
 
       - name: Install Power Query SDK tools
         shell: pwsh
-        run: |
-          $version = "${{ env.POWERQUERY_SDKTOOLS_VERSION }}"
-          $packageZip = Join-Path $env:RUNNER_TEMP "Microsoft.PowerQuery.SdkTools.$version.zip"
-          $packageDir = Join-Path $env:RUNNER_TEMP "Microsoft.PowerQuery.SdkTools.$version"
-          Invoke-WebRequest "https://www.nuget.org/api/v2/package/Microsoft.PowerQuery.SdkTools/$version" -OutFile $packageZip
-          if (Test-Path $packageDir) {
-            Remove-Item -Recurse -Force $packageDir
-          }
-          Expand-Archive -Path $packageZip -DestinationPath $packageDir -Force
-          $tools = Join-Path $packageDir "tools"
-          $makePQX = Join-Path $tools "MakePQX.exe"
-          if (-not (Test-Path $makePQX)) {
-            throw "MakePQX.exe not found at $makePQX"
-          }
-          "$tools" | Out-File -FilePath $env:GITHUB_PATH -Append
-          Write-Output "MakePQX available at $makePQX"
+        run: ./dev/scripts/install-powerquery-sdktools.ps1 -Version "${{ env.POWERQUERY_SDKTOOLS_VERSION }}"
 
       - name: Build .mez
         shell: pwsh
         working-directory: src
         run: |
-          MakePQX compile . -t OpenEHR
-          Get-ChildItem -Recurse -Path bin -Filter *.mez | ForEach-Object { Write-Host "Built: $($_.FullName)" }
+          & MakePQX compile . -t OpenEHR
+          $exitCode = $LASTEXITCODE
+          $mez = Get-ChildItem -Recurse -Path bin -Filter OpenEHR.mez | Select-Object -First 1
+          if (-not $mez) {
+            throw "OpenEHR.mez was not produced by MakePQX (exit code $exitCode)."
+          }
+          Write-Host "Built: $($mez.FullName)"
+          if ($exitCode -ne 0) {
+            Write-Warning "MakePQX exited with code $exitCode after producing OpenEHR.mez; continuing."
+          }
 
       - name: Locate .mez
         id: locate

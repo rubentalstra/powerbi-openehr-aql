@@ -9,6 +9,42 @@
 
 (aql as record, paging as record, schema as record) as record =>
     let
+        NormalizeBaseUrl = (cdrBaseUrl as text) as text =>
+            if Record.HasFields(aql, {"NormalizeBaseUrl"}) then
+                aql[NormalizeBaseUrl](cdrBaseUrl)
+            else if Text.EndsWith(cdrBaseUrl, "/") then
+                @NormalizeBaseUrl(Text.Start(cdrBaseUrl, Text.Length(cdrBaseUrl) - 1))
+            else
+                cdrBaseUrl,
+
+        EmptyStoredQueriesTable = () as table =>
+            Table.ToNavigationTable(
+                #table(
+                    type table [Name = text, Key = text, Data = any, ItemKind = text, ItemName = text, IsLeaf = logical],
+                    {}
+                ),
+                {"Key"},
+                "Name",
+                "Data",
+                "ItemKind",
+                "ItemName",
+                "IsLeaf"
+            ),
+
+        EmptyTemplatesTable = () as table =>
+            #table(
+                type table [
+                    template_id = nullable text,
+                    concept = nullable text,
+                    archetype_id = nullable text,
+                    created_timestamp = nullable text
+                ],
+                {}
+            ),
+
+        EmptyEhrsTable = () as table =>
+            #table(type table [EhrId = nullable text, SubjectId = nullable text], {}),
+
         Table.ToNavigationTable = (
             table             as table,
             keyColumns        as list,
@@ -34,13 +70,14 @@
         // Build the top-level navigator shown after connecting.
         BuildRoot = (cdrBaseUrl as text, adHocFn as function) as table =>
             let
+                baseUrl = NormalizeBaseUrl(cdrBaseUrl),
                 objects = #table(
                     {"Name",           "Key",       "Data",                             "ItemKind", "ItemName", "IsLeaf"},
                     {
                         {"Ad-hoc AQL",     "aql",       adHocFn,                            "Function", "Function", true},
-                        {"Stored Queries", "stored",    BuildStoredQueries(cdrBaseUrl),     "Folder",   "Folder",   false},
-                        {"Templates",      "templates", BuildTemplatesTable(cdrBaseUrl),    "Table",    "Table",    true},
-                        {"EHRs",           "ehrs",      BuildEhrsTable(cdrBaseUrl),         "Table",    "Table",    true}
+                        {"Stored Queries", "stored",    BuildStoredQueries(baseUrl),        "Folder",   "Folder",   false},
+                        {"Templates",      "templates", BuildTemplatesTable(baseUrl),       "Table",    "Table",    true},
+                        {"EHRs",           "ehrs",      BuildEhrsTable(baseUrl),            "Table",    "Table",    true}
                     }
                 )
             in
@@ -48,7 +85,8 @@
 
         BuildStoredQueries = (cdrBaseUrl as text) as table =>
             let
-                items = aql[ListStoredQueries](cdrBaseUrl, null),
+                fetched = try aql[ListStoredQueries](cdrBaseUrl, null),
+                items = if fetched[HasError] then {} else fetched[Value],
                 // Build a base table carrying qname + version so the Data column
                 // can lazily materialise each row via Table.AddColumn(each ...).
                 baseRows = List.Transform(items, (q) =>
@@ -74,45 +112,54 @@
                     each true
                 ),
                 final = Table.RemoveColumns(withKinds, {"qname", "version"}, MissingField.Ignore),
-                navCols = Table.SelectColumns(final, {"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"})
+                navCols = Table.SelectColumns(final, {"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
+                result = if List.IsEmpty(items) then EmptyStoredQueriesTable() else Table.ToNavigationTable(navCols, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
             in
-                Table.ToNavigationTable(navCols, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf"),
+                result,
 
         RunStoredQuery = (cdrBaseUrl as text, qualifiedName as text, optional version as nullable text) as table =>
             schema[ResultSetToTable](aql[ExecuteStored](cdrBaseUrl, qualifiedName, version, null), true),
 
         BuildTemplatesTable = (cdrBaseUrl as text) as table =>
             let
-                response = Web.Contents(
-                    cdrBaseUrl,
-                    [
-                        RelativePath         = "definition/template/adl1.4",
-                        Headers              = [#"Accept" = "application/json"] & aql[AuthHeader](),
-                        ManualStatusHandling = {401, 403, 404, 500},
-                        ExcludedFromCacheKey = {"Authorization"}
-                    ]
-                ),
-                parsed = Json.Document(response),
-                items  = if parsed is list then parsed else Record.FieldOrDefault(parsed, "templates", {}),
-                table0 = Table.FromList(items, Splitter.SplitByNothing(), {"Record"}, null, ExtraValues.Error),
-                // Tolerate missing fields — OPT listings vary between CDRs.
-                fields   = {"template_id", "concept", "archetype_id", "created_timestamp"},
-                expanded = Table.ExpandRecordColumn(table0, "Record", fields, fields, MissingField.UseNull)
+                fetched = try
+                    let
+                        response = Web.Contents(
+                            NormalizeBaseUrl(cdrBaseUrl),
+                            [
+                                RelativePath         = "definition/template/adl1.4",
+                                Headers              = [#"Accept" = "application/json"] & aql[AuthHeader](),
+                                ManualStatusHandling = {401, 403, 404, 500},
+                                ExcludedFromCacheKey = {"Authorization"}
+                            ]
+                        ),
+                        parsed = Json.Document(response),
+                        items  = if parsed is list then parsed else Record.FieldOrDefault(parsed, "templates", {}),
+                        table0 = Table.FromList(items, Splitter.SplitByNothing(), {"Record"}, null, ExtraValues.Error),
+                        // Tolerate missing fields — OPT listings vary between CDRs.
+                        fields   = {"template_id", "concept", "archetype_id", "created_timestamp"},
+                        expanded = Table.ExpandRecordColumn(table0, "Record", fields, fields, MissingField.UseNull)
+                    in
+                        expanded
             in
-                expanded,
+                if fetched[HasError] then EmptyTemplatesTable() else fetched[Value],
 
         BuildEhrsTable = (cdrBaseUrl as text) as table =>
             let
-                rs = paging[GetAllRows](
-                    cdrBaseUrl,
-                    "SELECT e/ehr_id/value AS EhrId, e/ehr_status/subject/external_ref/id/value AS SubjectId FROM EHR e",
-                    null,
-                    1000,
-                    null,
-                    null
-                )
+                fetched = try
+                    let
+                        rs = paging[GetAllRows](
+                            NormalizeBaseUrl(cdrBaseUrl),
+                            "SELECT e/ehr_id/value AS EhrId, e/ehr_status/subject/external_ref/id/value AS SubjectId FROM EHR e",
+                            null,
+                            1000,
+                            null,
+                            null
+                        )
+                    in
+                        schema[ResultSetToTable](rs, true)
             in
-                schema[ResultSetToTable](rs, true)
+                if fetched[HasError] then EmptyEhrsTable() else fetched[Value]
     in
         [
             #"Table.ToNavigationTable" = Table.ToNavigationTable,

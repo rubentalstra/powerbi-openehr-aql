@@ -24,7 +24,7 @@ Run AQL against your openEHR Clinical Data Repository directly from Power BI Des
 
 ---
 
-> **Status — pre-release.** `v0.1.0` is in active development against EHRbase 2.x. The full Phase 1 MVP scope is tracked in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md); shipped behaviour is documented in [CHANGELOG.md](CHANGELOG.md).
+> **Status — public tester target.** `v0.1.0` focuses on EHRbase 2.x, Basic auth, ad-hoc AQL, pagination, and RM-object flattening. OAuth and non-EHRbase CDRs are documented as experimental until they are validated end to end.
 
 ## Why this connector
 
@@ -34,12 +34,13 @@ Run AQL against your openEHR Clinical Data Repository directly from Power BI Des
 - **Service-safe.** `TestConnection` is implemented, `Web.Contents` base URLs are static (no dynamic-source error), and `ExcludedFromCacheKey = {"Authorization"}` keeps rotating tokens from poisoning the cache.
 - **Zero PHI in logs.** No row-level `Diagnostics.Trace`, no query bodies at `Information` level.
 
-## Quick install (when v0.1.0 ships)
+## Quick install for v0.1 testers
 
 1. Download the signed `OpenEHR.pqx` (and `dev-cert.cer`) from the latest [GitHub Release](https://github.com/rubentalstra/powerbi-openehr-aql/releases).
 2. Import `dev-cert.cer` into Windows trust stores once — see [docs/getting-started/install-self-signed.md](https://rubentalstra.github.io/powerbi-openehr-aql/getting-started/install-self-signed/).
 3. Copy `OpenEHR.pqx` to `%USERPROFILE%\Documents\Power BI Desktop\Custom Connectors\` (create the folder if missing).
 4. Restart Power BI Desktop → **Get Data → Other → openEHR (Beta)**.
+5. For local EHRbase testing, connect to `http://localhost:8080/ehrbase/rest/openehr/v1` with username `ehrbase` and password `ehrbase`.
 
 ## Usage sketch
 
@@ -58,6 +59,20 @@ Source = OpenEHR.Aql(
     [ PageSize = 500, ExpandRmObjects = true ]
 )
 
+// Seeded blood-pressure trend
+Source = OpenEHR.Aql(
+    "http://localhost:8080/ehrbase/rest/openehr/v1",
+    "SELECT
+        e/ehr_id/value AS EhrId,
+        o/data[at0001]/events[at0006]/data[at0003]/items[at0004]/value/magnitude AS Systolic,
+        o/data[at0001]/events[at0006]/data[at0003]/items[at0005]/value/magnitude AS Diastolic,
+        o/data[at0001]/events[at0006]/time/value AS Taken
+     FROM EHR e CONTAINS COMPOSITION c CONTAINS OBSERVATION o
+        [openEHR-EHR-OBSERVATION.blood_pressure.v2]
+     ORDER BY o/data[at0001]/events[at0006]/time/value DESC",
+    [ PageSize = 1 ]
+)
+
 // Stored query
 Source = OpenEHR.StoredQuery(
     "http://localhost:8080/ehrbase/rest/openehr/v1",
@@ -72,7 +87,7 @@ Full reference: [Functions](https://rubentalstra.github.io/powerbi-openehr-aql/r
 
 ```mermaid
 flowchart LR
-    PBI["Power BI Desktop<br/>+ Service"] -->|Get Data<br/>openEHR (Beta)| SEC["src/OpenEHR.pq<br/>(section document)"]
+    PBI["Power BI Desktop<br/>or Service"] -->|Get Data<br/>openEHR| SEC["src/OpenEHR.pq<br/>(section document)"]
     SEC --> F1["OpenEHR.Contents<br/>nav entry"]
     SEC --> F2["OpenEHR.Aql<br/>ad-hoc"]
     SEC --> F3["OpenEHR.StoredQuery<br/>named"]
@@ -80,11 +95,11 @@ flowchart LR
     F2 --> LIB
     F3 --> LIB
     subgraph LIB[library modules]
-      AQ[Aql.pqm<br/>HTTP + auth + errors]
-      PG[Paging.pqm<br/>lag-one pagination]
-      SC[Schema.pqm<br/>RS → table + RM expand]
-      NV[Navigation.pqm<br/>nav-table builders]
-      AU[Auth.pqm<br/>OAuth2 PKCE]
+      AQ["Aql.pqm<br/>HTTP + auth + errors"]
+      PG["Paging.pqm<br/>lag-one pagination"]
+      SC["Schema.pqm<br/>RS to table + RM expand"]
+      NV["Navigation.pqm<br/>nav-table builders"]
+      AU["Auth.pqm<br/>OAuth2 PKCE"]
     end
     LIB -->|POST /query/aql| CDR[("openEHR CDR<br/>EHRbase 2.x")]
 ```
@@ -93,7 +108,7 @@ flowchart LR
 
 | CDR              | Status                                     |
 | ---------------- | ------------------------------------------ |
-| **EHRbase 2.x**  | **Targeted for v0.1.0 — in active development** |
+| **EHRbase 2.x**  | **v0.1 public tester target** |
 | Other CDRs       | Post-v0.1.0. File a [CDR compatibility report](https://github.com/rubentalstra/powerbi-openehr-aql/issues/new?template=cdr_compatibility.yml) to vote one up. |
 
 ## Project resources

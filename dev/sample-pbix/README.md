@@ -1,6 +1,21 @@
-# Sample `.pbix` dashboards — PENDING
+# Sample `.pbix` dashboards and validation notes
 
-`.pbix` files require Power BI Desktop (Windows). This repo's maintainer develops on macOS, so the three planned sample reports are captured here as AQL queries for a future contributor with Windows access to build and commit.
+`.pbix` files require Power BI Desktop (Windows). Do not commit a `.pbix`
+unless it uses only the deterministic seed data in `dev/seed-data` and contains
+no credentials.
+
+## v0.1 Windows validation
+
+Before publishing a tester release, run the checklist in
+[`docs/getting-started/windows-validation.md`](../../docs/getting-started/windows-validation.md)
+and record:
+
+- Power BI Desktop version.
+- `OpenEHR.pqx` release tag or SHA.
+- Whether **openEHR (Beta)** appears under **Get Data → Other**.
+- Whether Basic auth to `http://localhost:8080/ehrbase/rest/openehr/v1` succeeds.
+- Whether the blood-pressure query returns at least two rows with `PageSize = 1`.
+- Whether save, close, reopen, and refresh succeeds without credentials in M.
 
 ## Dashboard 1 — Vital signs overview
 

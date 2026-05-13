@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 ## [Unreleased]
 
 ### Added
+- v0.1 Windows validation checklist and sample-PBIX validation notes for the public tester release path.
+- Release workflow now runs on published GitHub Releases as well as `v*` tag pushes / manual dispatch, attaches `OpenEHR.pqx`, `dev-cert.cer`, and `SHA256SUMS.txt` to the release, and uploads the same files as workflow artifacts.
+- `dev/scripts/install-powerquery-sdktools.ps1` centralises Power Query SDK tool installation and the MakePQX binding-redirect workaround used by CI and release workflows.
 - **PHI-safe mode** — `PhiSafe = true` option on `OpenEHR.Aql`, `OpenEHR.StoredQuery`, `OpenEHR.Template`. Refuses HTTP Basic over plaintext `http://`, redacts `Error.Detail.Body` to `[ContentBytes, Redacted = true]`, replaces `Error.Detail.Context` with `<redacted>`, and emits generic category messages instead of vendor-provided strings. Implemented in `src/Aql.pqm` via `NormalizePolicy` + `PhiGuardNonTls` + body-summary branch in `RaiseError`.
 - **HTTP retry/backoff** — transient statuses (408, 425, 429, 500, 502, 503, 504) are retried with exponential backoff and ±30% jitter. Tunable via `RetryPolicy = [ MaxAttempts, InitialDelayMs, Jitter ]`. Driven by a `List.Generate` state machine using `Function.InvokeAfter(() => null, #duration(...))` (M-native sleep). Non-transient statuses short-circuit and fail immediately.
 - **`AuditContext`** — opaque correlation id emitted as `X-Audit-Context` on every request; always included in `ExcludedFromCacheKey` so rotating the value between refreshes does not poison the response cache.
@@ -21,11 +24,16 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - Dev environment: `dev/docker-compose.yml` (Postgres 16 + EHRbase 2.15 + Keycloak 26 placeholder), seed-data scaffolding with `_type` discriminators for polymorphic RM JSON (`PARTY_SELF`, `PARTY_REF`, `GENERIC_ID`), `check-health.{sh,ps1}`, `load-seed.{sh,ps1}`, `new-self-signed-cert.ps1`.
 - MkDocs Material documentation site with Mermaid.js diagram support (`pymdownx.superfences` custom fence). Real content for: home, getting-started (end-user, gateway admin, self-signed, unsigned, future signed-cert), auth (basic, OAuth PKCE, client credentials, Entra ID), cookbook (blood-pressure trend, incremental refresh, EHRbase notes), reference (functions, options, error-codes), compliance (PHI-safe mode), contributing (dev environment), troubleshooting.
 - GitHub automation: CODEOWNERS, FUNDING, Dependabot, PR template, bug / feature / CDR-compat issue templates, discussion templates.
-- CI workflows pinned to current latest action majors: `ci.yml` (checkout@v6, setup-dotnet@v5, setup-python@v6, upload-artifact@v7 — builds on `windows-latest` + integration tests against an EHRbase service container with Spring Boot 3.x env vars), `release.yml` (action-gh-release@v3 for tag-driven signed `.pqx` + `.cer`), `docs.yml` (GitHub Pages artifact deploy flow: `actions/configure-pages@v6` + `upload-pages-artifact@v5` + `deploy-pages@v5`), `codeql.yml` (codeql-action@v4), `spec-link-check.yml` (lychee-action@v2, create-issue-from-file@v6).
+- CI workflows pinned to current latest action majors: `ci.yml` (checkout@v6, setup-dotnet@v5, setup-python@v6, upload-artifact@v7 — builds on `windows-latest` + integration tests against an EHRbase service container with Spring Boot 3.x env vars), `release.yml` (action-gh-release@v3 for release/tag-driven signed `.pqx` + `.cer`), `docs.yml` (GitHub Pages artifact deploy flow: `actions/configure-pages@v6` + `upload-pages-artifact@v5` + `deploy-pages@v5`), `codeql.yml` (codeql-action@v4), `spec-link-check.yml` (lychee-action@v2, create-issue-from-file@v6).
 - Canonical AQL test suite: `tests/fixtures/canonical-queries.json` + `tests/integration/run-canonical.sh`.
 - Claude Code project context: `CLAUDE.md` + `.claude/settings.json` + 5 slash commands (`/build`, `/test-aql`, `/release`, `/spec`, `/review`).
 
 ### Changed
+- `OpenEHR.Aql`, stored query, template, and navigation requests now normalize trailing slashes on `cdrBaseUrl` before calling `Web.Contents`.
+- Navigation builders now degrade to empty typed tables when optional stored-query/template/EHR listings are unavailable, so opening the connector is not blocked by an unsupported optional endpoint.
+- Canonical AQL fixtures now require seeded EHRbase rows for composition, blood-pressure, EHR, and smoke queries, and include an expected malformed-AQL rejection.
+- `OpenEHR.query.pq` now exercises connector pagination with `PageSize = 1`, schema flattening edge cases, duplicate aliases, unknown-record JSON fallback, empty result sets, and malformed AQL.
+- README and docs now describe the v0.1 public tester path as EHRbase Basic auth first; OAuth docs are marked experimental until validated.
 - **Every `Web.Contents` call now threads a normalized `policy` record** (`PhiSafe`, `AuditContext`, `MaxAttempts`, `InitialDelayMs`, `Jitter`) through `Aql[Execute]` / `Aql[ExecuteStored]` / `Aql[ListStoredQueries]` / `Aql[GetTemplate]`. `Paging.pqm` accepts an optional `policy` arg on both `GetAllPages` / `GetAllRows`. `Navigation.pqm` passes `null` to keep default behaviour.
 - **`ExcludedFromCacheKey`** widened to `{"Authorization", "X-Audit-Context"}` on every `Web.Contents` call so audit-context rotation does not poison the cache alongside token rotation.
 - **`ManualStatusHandling`** expanded to cover the full transient-retry set (408, 425, 429, 500, 502, 503, 504) in addition to the existing 400/401/403/404/409/413, so `WithRetries` can see and retry them.
@@ -38,6 +46,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - EHR_STATUS subject / external_ref seed payloads include the `_type` discriminators EHRbase 2.x's Jackson deserialiser requires.
 
 ### Fixed
+- Retry jitter no longer attempts to parse `Text.NewGuid()` as a number, which would fail on the first transient retry.
 - MkDocs `--strict` build warning about `docs/getting-started/install-self-signed.md` linking to `../../ROADMAP.md` outside `docs_dir`; the link now points at the absolute GitHub URL.
 - EHRbase service container in CI was passing legacy `DB_URL` / `DB_USER` / `DB_PASS` env vars that EHRbase 2.x (Spring Boot 3.x) ignores; now uses `SPRING_DATASOURCE_*` + `SPRING_FLYWAY_*` matching `docker-compose.yml`.
 

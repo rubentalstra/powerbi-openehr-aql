@@ -1,5 +1,8 @@
 # OAuth 2.0 with PKCE
 
+!!! warning "Experimental in v0.1.0"
+    The connector contains OAuth PKCE plumbing, but the public `v0.1.0` tester path is EHRbase 2.x with Basic auth. Treat OAuth as experimental until it is validated with a real IDP and Power BI gateway refresh.
+
 Interactive user sign-in against any OpenID Connect provider — Keycloak, Auth0, Okta, Entra ID. The connector runs the **authorization-code flow with PKCE** (RFC 7636), so no client secret is embedded in the `.pqx`.
 
 ## Flow at a glance

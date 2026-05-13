@@ -47,7 +47,26 @@ done
 echo "Templates processed: ${template_count}"
 
 echo "Loading compositions from ${SEED_DIR}/compositions"
-declare -A ehr_by_subject=()
+subjects=()
+ehr_ids=()
+
+find_ehr_for_subject() {
+  local subject_id="$1"
+  local i
+  for i in "${!subjects[@]}"; do
+    if [[ "${subjects[$i]}" == "${subject_id}" ]]; then
+      printf '%s' "${ehr_ids[$i]}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+remember_ehr_for_subject() {
+  local subject_id="$1" ehr_id="$2"
+  subjects+=("${subject_id}")
+  ehr_ids+=("${ehr_id}")
+}
 
 create_ehr_for() {
   local subject_id="$1" subject_namespace="$2"
@@ -86,14 +105,14 @@ composition_count=0
 for comp in "${SEED_DIR}/compositions/"*.json; do
   subject_id=$(jq -r '.meta.subject_id // "seed-subject-000"' "${comp}")
   subject_ns=$(jq -r '.meta.subject_namespace // "local-dev"' "${comp}")
-  ehr_id="${ehr_by_subject[${subject_id}]:-}"
+  ehr_id="$(find_ehr_for_subject "${subject_id}" || true)"
   if [[ -z "${ehr_id}" ]]; then
     ehr_id=$(create_ehr_for "${subject_id}" "${subject_ns}")
     if [[ -z "${ehr_id}" ]]; then
       echo "  could not create EHR for ${subject_id}" >&2
       exit 1
     fi
-    ehr_by_subject[${subject_id}]="${ehr_id}"
+    remember_ehr_for_subject "${subject_id}" "${ehr_id}"
     echo "  EHR ${ehr_id} for subject ${subject_id}"
   fi
 
@@ -114,4 +133,4 @@ for comp in "${SEED_DIR}/compositions/"*.json; do
   fi
 done
 echo "Compositions uploaded: ${composition_count}"
-echo "Distinct EHRs created: ${#ehr_by_subject[@]}"
+echo "Distinct EHRs created: ${#subjects[@]}"

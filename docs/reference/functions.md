@@ -36,7 +36,7 @@ A `table` decorated as a nav table with four rows:
 | --------------- | ---------------------------------------------------------------------------------------------- |
 | Ad-hoc AQL      | Leaf — opens the **Function** invocation UI binding to `OpenEHR.Aql`.                          |
 | Stored Queries  | Folder — one row per registered stored query; each row's `Data` cell is a table of rows.       |
-| Templates       | Folder — list of installed OPTs with `template_id`, `concept`, `archetype_id`, `created_on`.   |
+| Templates       | Folder — list of installed OPTs with `template_id`, `concept`, `archetype_id`, `created_timestamp`. |
 | EHRs            | Leaf — table of all `ehr_id`s the caller is authorised to see.                                 |
 
 ### Example
@@ -72,7 +72,7 @@ A `table` whose columns mirror the AQL `SELECT` list. RM-object-shaped columns a
 | `OpenEHR.NotFoundError`  | 404   | Base URL wrong, or query endpoint not exposed by the CDR.                      |
 | `OpenEHR.TimeoutError`   | 408   | Query exceeded `Timeout`. Consider adding a `WHERE` clause or a stored query.  |
 | `OpenEHR.ConflictError`  | 409   | Vendor-specific.                                                               |
-| `OpenEHR.HttpError`      | other | See `Details.response` for the raw body.                                       |
+| `OpenEHR.HttpError`      | other | See `Details.Body` for the raw body, unless `PhiSafe = true` redacted it.      |
 
 ### Example
 
@@ -178,12 +178,14 @@ When `ExpandRmObjects = true`, columns whose first non-null value is a record-sh
 
 | RM type         | Flattened columns                                                     |
 | --------------- | --------------------------------------------------------------------- |
-| `DV_QUANTITY`   | `.magnitude`, `.units`, `.precision`                                  |
-| `DV_CODED_TEXT` | `.value`, `.defining_code.terminology_id.value`, `.defining_code.code_string` |
-| `DV_TEXT`       | `.value`                                                              |
-| `DV_DATE_TIME`  | `.value` (ISO-8601)                                                   |
-| `DV_IDENTIFIER` | `.id`, `.issuer`, `.assigner`, `.type`                                |
-| `PARTY_SELF`    | `.external_ref.id.value`, `.external_ref.namespace`                   |
+| `DV_QUANTITY`   | `_magnitude`, `_units`, `_precision`                                  |
+| `DV_CODED_TEXT` | `_value`, `_code`, `_terminology`                                      |
+| `DV_TEXT`       | `_value`                                                              |
+| `DV_DATE_TIME`  | `_value` (ISO-8601)                                                   |
+| `DV_DATE`       | `_value`                                                              |
+| `DV_BOOLEAN`    | `_value`                                                              |
+| `DV_COUNT`      | `_magnitude`                                                          |
+| `DV_IDENTIFIER` | `_id`, `_issuer`, `_assigner`, `_type`                                |
 
 Unknown record shapes fall back to `Json.FromValue(.)` text so nothing is silently dropped.
 

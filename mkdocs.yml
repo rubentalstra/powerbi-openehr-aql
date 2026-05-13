@@ -71,6 +71,7 @@ nav:
       - Gateway admin install: getting-started/install-gateway-admin.md
       - Unsigned / evaluation: getting-started/install-uncertified.md
       - Self-signed cert install: getting-started/install-self-signed.md
+      - Windows validation: getting-started/windows-validation.md
       - Signed cert (future): getting-started/install-signed-cert.md
   - Authentication:
       - Basic auth: auth/basic.md

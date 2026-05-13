@@ -60,16 +60,32 @@ gh run watch
 
 The CI workflow spins up EHRbase for the canonical AQL smoke tests and separately builds an unsigned `src/bin/AnyCPU/Debug/OpenEHR.mez`. The release workflow signs that build into `OpenEHR.pqx`.
 
+Connector-runtime validation (`MakePQX run OpenEHR.query.pq`) still needs a Windows host with Power Query SDK tooling and credentials configured for the local EHRbase source. Track that manually with the [Windows validation checklist](../getting-started/windows-validation.md).
+
+## Publishing installable release assets
+
+The `release.yml` workflow runs on:
+
+- publishing a GitHub Release,
+- pushing a `v*` tag,
+- manual `workflow_dispatch` with an existing tag.
+
+It runs `MakePQX compile`, signs the resulting `.mez` into `OpenEHR.pqx`, exports `dev-cert.cer`, writes `SHA256SUMS.txt`, attaches those files to the GitHub Release, and also uploads them as a workflow artifact.
+
+Required repository secrets:
+
+| Secret | Purpose |
+| ------ | ------- |
+| `CODE_SIGN_CERT_PFX_BASE64` | Base64 encoded self-signed code-signing PFX. |
+| `CODE_SIGN_CERT_PASSWORD` | Password for that PFX. |
+
 ## Windows-only: signing locally
 
 Only needed if you want a personal build to load in Power BI Desktop before CI catches up.
 
 ```powershell
 # Tooling
-$version = '2.153.3'
-Invoke-WebRequest "https://www.nuget.org/api/v2/package/Microsoft.PowerQuery.SdkTools/$version" -OutFile "$env:TEMP\Microsoft.PowerQuery.SdkTools.$version.zip"
-Expand-Archive "$env:TEMP\Microsoft.PowerQuery.SdkTools.$version.zip" "$env:TEMP\Microsoft.PowerQuery.SdkTools.$version" -Force
-$env:Path = "$env:TEMP\Microsoft.PowerQuery.SdkTools.$version\tools;$env:Path"
+.\dev\scripts\install-powerquery-sdktools.ps1
 
 # Build
 Set-Location src

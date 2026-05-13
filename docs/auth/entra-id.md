@@ -1,5 +1,8 @@
 # Microsoft Entra ID
 
+!!! warning "Experimental in v0.1.0"
+    The `v0.1.0` tester release is validated against EHRbase Basic auth first. Entra ID configuration is documented for implementers, but must be proven with a registered app, signed connector, and gateway refresh before it is treated as supported.
+
 The connector's OAuth defaults target **Entra ID v2** (`login.microsoftonline.com`). This page covers the Entra-specific registration and config steps.
 
 ## 1. Register the app

@@ -101,7 +101,7 @@ OpenEHR.AqlType = type function (
         optional AuditContext    = nullable text
     ] meta [
         Documentation.FieldCaption     = "Options",
-        Documentation.FieldDescription = "PageSize (rows per round-trip, default 1000). ExpandRmObjects (flatten DV_QUANTITY/DV_CODED_TEXT/... into scalar columns, default true). Timeout (per-request, default 2m). QueryParameters (record substituted into :name placeholders). PhiSafe (refuse Basic-over-http, redact error bodies). RetryPolicy ([MaxAttempts, InitialDelayMs, Jitter]). AuditContext (opaque correlation id echoed as X-Audit-Context header)."
+        Documentation.FieldDescription = "PageSize (rows per round-trip, default 1000). ExpandRmObjects (flatten DV_QUANTITY/DV_CODED_TEXT/... into scalar columns, default true). Timeout (per-request, default 2m). QueryParameters (record substituted into $name placeholders). PhiSafe (refuse Basic-over-http, redact error bodies). RetryPolicy ([MaxAttempts, InitialDelayMs, Jitter]). AuditContext (opaque correlation id echoed as X-Audit-Context header)."
     ])
 ) as table meta [
     Documentation.Name        = "OpenEHR.Aql",

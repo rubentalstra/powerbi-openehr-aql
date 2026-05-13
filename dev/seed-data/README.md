@@ -11,18 +11,20 @@ POST /ehrbase/rest/openehr/v1/definition/template/adl1.4
 Content-Type: application/xml
 ```
 
-Recommended starter set (3 templates — enough for the canonical query suite):
+The v0.1 fixture set committed to this repo is intentionally small and
+deterministic:
 
-- `vital_signs.opt` — blood pressure, pulse, body temperature.
-- `laboratory_test.opt` — lab results with `DV_QUANTITY` value + units.
-- `demographics.opt` — patient demographics with `DV_CODED_TEXT` gender.
+- `Blutdruck.opt` — blood-pressure template used by the canonical AQL suite.
+- `KDS_Laborbericht.opt` — laboratory-report template reserved for follow-up
+  lab-result fixtures.
 
 Sources:
 
 - EHRbase test fixtures — https://github.com/ehrbase/ehrbase/tree/develop/service/src/test/resources/knowledge/operational_templates
 - openEHR Clinical Knowledge Manager — https://ckm.openehr.org/ckm/
 
-The repo does not vendor OPTs directly to avoid licensing ambiguity with upstream fixtures. Run `bash scripts/fetch-templates.sh` (added in a later step) or copy files manually before first seed.
+Additional OPTs can be copied in manually when broadening the suite. Keep them
+small, license-compatible, and deterministic.
 
 ## Compositions
 
@@ -39,4 +41,7 @@ Generation tips:
 - Better Sample Generator: https://better-care.atlassian.net/wiki/spaces/SUPP/pages/1737031777/Synthetic+data
 - Hand-craft one, then script variation by mutating values (magnitude, datetime) in a loop.
 
-Target: ≥50 compositions spread across the 3 templates (matches Task 0.4 acceptance criteria).
+The current committed dataset contains two blood-pressure compositions for one
+synthetic subject. That is enough to prove Basic auth, AQL execution, RM
+flattening, and connector pagination with `PageSize = 1`. Broaden this to 50+
+rows before performance testing or public demo dashboards.

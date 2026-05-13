@@ -35,6 +35,7 @@ for i in $(seq 0 $((count - 1))); do
   assert_cols=$(jq -c ".queries[$i].assertColumns" "${FIXTURES}")
   assert_min=$(jq -r ".queries[$i].assertMinRows" "${FIXTURES}")
   allow_empty=$(jq -r ".queries[$i].allowEmpty" "${FIXTURES}")
+  expected_error=$(jq -r ".queries[$i].expectedError // empty" "${FIXTURES}")
 
   body=$(jq -nc --arg q "${aql}" --argjson qp "${qp}" \
     'if $qp == null then {q: $q} else {q: $q, query_parameters: $qp} end')
@@ -58,13 +59,33 @@ for i in $(seq 0 $((count - 1))); do
   is_err=$(echo "${resp}" | jq -r 'has("message") or has("error")')
   if [[ "${is_err}" == "true" ]]; then
     msg=$(echo "${resp}" | jq -r '.message // .error')
-    echo "  FAIL: ${msg}"
-    fail=$((fail + 1))
-    failures+=("${id}: ${msg}")
+    if [[ -n "${expected_error}" ]]; then
+      msg_lower=$(printf '%s' "${msg}" | tr '[:upper:]' '[:lower:]')
+      expected_lower=$(printf '%s' "${expected_error}" | tr '[:upper:]' '[:lower:]')
+      if [[ "${expected_error}" == "__any__" || "${msg_lower}" == *"${expected_lower}"* ]]; then
+        echo "  PASS (expected error: ${msg})"
+        pass=$((pass + 1))
+      else
+        echo "  FAIL: expected error containing '${expected_error}', got '${msg}'"
+        fail=$((fail + 1))
+        failures+=("${id}: wrong error ${msg}")
+      fi
+    else
+      echo "  FAIL: ${msg}"
+      fail=$((fail + 1))
+      failures+=("${id}: ${msg}")
+    fi
     continue
   fi
 
-  got_cols=$(echo "${resp}" | jq -c '[.columns[]?.name // .columns[]?.path]')
+  if [[ -n "${expected_error}" ]]; then
+    echo "  FAIL: expected error containing '${expected_error}', got success"
+    fail=$((fail + 1))
+    failures+=("${id}: expected error")
+    continue
+  fi
+
+  got_cols=$(echo "${resp}" | jq -c '[.columns[]? | (.name // .path)]')
   row_count=$(echo "${resp}" | jq -r '.rows | length')
 
   missing=$(jq -nc --argjson want "${assert_cols}" --argjson got "${got_cols}" \

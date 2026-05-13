@@ -52,11 +52,20 @@ let
         // the idiomatic way to delay. `#duration(0,0,0,seconds)` supports fractional seconds.
         Function.InvokeAfter(() => null, #duration(0, 0, 0, ms / 1000)),
 
+    NormalizeBaseUrl = (cdrBaseUrl as text) as text =>
+        if Text.EndsWith(cdrBaseUrl, "/") then
+            @NormalizeBaseUrl(Text.Start(cdrBaseUrl, Text.Length(cdrBaseUrl) - 1))
+        else
+            cdrBaseUrl,
+
     // Jitter keeps thundering-herd behaviour off when many gateways all retry at once.
+    // Power Query M does not expose a general random-number API here. Keep the
+    // multiplier deterministic and bounded rather than parsing a GUID as a
+    // number, which fails on the first transient retry.
     NextDelay = (attempt as number, initialMs as number, jitter as logical) as number =>
         let
             base = initialMs * Number.Power(2, attempt - 1),
-            jit  = if jitter then 1 - 0.3 + (Number.Mod(Number.From(Text.NewGuid()), 60) / 100) else 1
+            jit  = if jitter then 1 + ((Number.Mod(attempt * 37, 61) - 30) / 100) else 1
         in
             base * jit,
 
@@ -127,8 +136,9 @@ let
     ) as record =>
         let
             policy = NormalizePolicy(policyArg),
+            baseUrl = NormalizeBaseUrl(cdrBaseUrl),
             cred   = Extension.CurrentCredential(),
-            _phi   = PhiGuardNonTls(cdrBaseUrl, policy, cred[AuthenticationKind]),
+            _phi   = PhiGuardNonTls(baseUrl, policy, cred[AuthenticationKind]),
 
             body = [q = aql]
                 & (if queryParameters <> null then [query_parameters = queryParameters] else [])
@@ -139,7 +149,7 @@ let
 
             attempt = () =>
                 AttemptRequest(
-                    cdrBaseUrl,
+                    baseUrl,
                     [
                         RelativePath          = "query/aql",
                         Headers               = headers,
@@ -170,8 +180,9 @@ let
     ) as record =>
         let
             policy = NormalizePolicy(policyArg),
+            baseUrl = NormalizeBaseUrl(cdrBaseUrl),
             cred   = Extension.CurrentCredential(),
-            _phi   = PhiGuardNonTls(cdrBaseUrl, policy, cred[AuthenticationKind]),
+            _phi   = PhiGuardNonTls(baseUrl, policy, cred[AuthenticationKind]),
 
             path = if version <> null and version <> ""
                 then "query/" & qualifiedName & "/" & version
@@ -179,7 +190,7 @@ let
 
             attempt = () =>
                 AttemptRequest(
-                    cdrBaseUrl,
+                    baseUrl,
                     [
                         RelativePath         = path,
                         Headers              = BaseHeaders("application/json", policy),
@@ -199,9 +210,10 @@ let
     ListStoredQueries = (cdrBaseUrl as text, optional policyArg as nullable record) as list =>
         let
             policy = NormalizePolicy(policyArg),
+            baseUrl = NormalizeBaseUrl(cdrBaseUrl),
             attempt = () =>
                 AttemptRequest(
-                    cdrBaseUrl,
+                    baseUrl,
                     [
                         RelativePath         = "definition/query",
                         Headers              = BaseHeaders("application/json", policy),
@@ -222,9 +234,10 @@ let
     GetTemplate = (cdrBaseUrl as text, templateId as text, optional policyArg as nullable record) as any =>
         let
             policy = NormalizePolicy(policyArg),
+            baseUrl = NormalizeBaseUrl(cdrBaseUrl),
             attempt = () =>
                 AttemptRequest(
-                    cdrBaseUrl,
+                    baseUrl,
                     [
                         RelativePath         = "definition/template/adl1.4/" & templateId,
                         Headers              = BaseHeaders("application/json", policy),
@@ -327,5 +340,6 @@ in
         GetTemplate       = GetTemplate,
         AuthHeader        = AuthHeader,
         RaiseError        = RaiseError,
-        NormalizePolicy   = NormalizePolicy
+        NormalizePolicy   = NormalizePolicy,
+        NormalizeBaseUrl  = NormalizeBaseUrl
     ]

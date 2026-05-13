@@ -15,14 +15,14 @@ updates:
       - "dependencies"
       - "ci"
 
-  # Enable once docs requirements.txt exists.
-  # - package-ecosystem: "pip"
-  #   directory: "/docs"
-  #   schedule:
-  #     interval: "weekly"
+# Enable once docs requirements.txt exists.
+# - package-ecosystem: "pip"
+#   directory: "/docs"
+#   schedule:
+#     interval: "weekly"
 
-  # Enable once Docker base images are pinned in a Dockerfile.
-  # - package-ecosystem: "docker"
-  #   directory: "/dev"
-  #   schedule:
-  #     interval: "weekly"
+# Enable once Docker base images are pinned in a Dockerfile.
+# - package-ecosystem: "docker"
+#   directory: "/dev"
+#   schedule:
+#     interval: "weekly"

@@ -5,7 +5,7 @@ A native Power BI custom data connector for openEHR [Archetype Query Language (A
 Run AQL against an openEHR Clinical Data Repository directly from Power BI Desktop. Pagination, Reference-Model flattening, and Power BI Service refresh through the on-premises gateway are handled for you.
 
 !!! warning "Pre-release"
-    `v0.1.0` is in active development against **EHRbase 2.x**. The [source plan](https://github.com/rubentalstra/powerbi-openehr-aql/blob/main/IMPLEMENTATION_PLAN.md) tracks the full roadmap. Expect breaking changes until `v1.0.0`.
+    `v0.1.0` is the public tester target for **EHRbase 2.x + Basic auth + AQL**. OAuth and non-EHRbase CDRs remain experimental until they are validated end to end.
 
 ## How it fits together
 
@@ -28,6 +28,7 @@ flowchart LR
 2. Import `dev-cert.cer` into Windows trust stores once — see [Self-signed cert install](getting-started/install-self-signed.md).
 3. Drop `OpenEHR.pqx` into `%USERPROFILE%\Documents\Power BI Desktop\Custom Connectors\`.
 4. Restart Power BI Desktop → **Get Data → Other → openEHR (Beta)**.
+5. For local validation, connect to `http://localhost:8080/ehrbase/rest/openehr/v1` with Basic auth (`ehrbase` / `ehrbase`).
 
 ## Why this connector
 
