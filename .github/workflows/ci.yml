@@ -32,7 +32,7 @@ jobs:
     outputs:
       mez-path: ${{ steps.locate.outputs.mez }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Power Query SDK tools
         shell: pwsh
@@ -77,7 +77,7 @@ jobs:
     # before actions/checkout runs, so ordering and volume-based init would
     # not work there.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Seed .env for docker compose
         run: cp dev/.env.example dev/.env
@@ -132,7 +132,7 @@ jobs:
     name: Lint YAML + PowerShell
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Python
         uses: actions/setup-python@v6
