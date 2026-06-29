@@ -39,7 +39,7 @@ jobs:
       # Material stores plugin build artifacts (social cards, optimize, etc.)
       # under ~/.cache. Rotates with requirements.txt hash so upgrades bust it.
       - name: Cache MkDocs Material build artifacts
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache
           key: mkdocs-material-${{ runner.os }}-${{ hashFiles('docs/requirements.txt') }}-${{ github.run_id }}
