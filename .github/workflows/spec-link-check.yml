@@ -24,7 +24,6 @@ jobs:
             --no-progress
             --verbose
             --exclude-all-private
-            --exclude-mail
             --max-redirects 5
             "docs/**/*.md"
             "IMPLEMENTATION_PLAN.md"
